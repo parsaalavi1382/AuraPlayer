@@ -1,0 +1,7 @@
+.venv/
+library_cache.json
+.md_temp/
+
+# Python bytecode and cache
+__pycache__/
+*.pyc
