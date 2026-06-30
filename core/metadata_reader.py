@@ -14,6 +14,13 @@ native interfaces depending on what's available. mutagen.File(easy=True)
 unifies MP3/FLAC/OGG under common lowercase keys, but MP4 needs its own
 handling since "easy" mode doesn't fully normalize disc/track numbers
 or album art there.
+
+Album art extraction (get_album_art) is a SEPARATE read path from
+read_track_metadata() -- the scan path only needs has_embedded_art (a
+bool) for speed across a whole library, while the Player Screen needs
+the actual decoded image for exactly one track at a time. Keeping these
+separate means a full-library scan never has to decode and discard
+artwork bytes for thousands of files it isn't displaying.
 """
 
 from __future__ import annotations
@@ -23,9 +30,23 @@ from typing import Optional
 
 from mutagen import File as MutagenFile
 from mutagen.mp4 import MP4
+from mutagen.id3 import ID3
+from mutagen.flac import FLAC
+from mutagen.oggvorbis import OggVorbis
+
+from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
+from PyQt6.QtCore import Qt, QRectF
 
 from core.models import Track
 from utils.artist_parser import split_artists
+
+# Player Screen album art is rendered at a fixed max size -- larger
+# embedded art (some files ship 3000x3000 covers) is downscaled once
+# here rather than asking every call site to remember to do it, and
+# rounded corners are applied globally so every place that calls
+# get_album_art() gets consistent visual treatment for free.
+MAX_ARTWORK_SIZE = 300
+ARTWORK_CORNER_RADIUS = 12
 
 
 def _first_or_default(value, default):
@@ -216,3 +237,109 @@ def read_track_metadata(
         has_embedded_art=raw["has_embedded_art"],
         source_folder=source_folder,
     )
+
+
+# ============================================================
+# Album art extraction (Step 4 -- Player Screen)
+# ============================================================
+
+def _extract_raw_art_bytes(filepath: str) -> Optional[bytes]:
+    """Per-format raw image byte extraction. Returns None if the file
+    has no embedded art, is unreadable, or the format isn't one we
+    extract art from (e.g. WAV practically never carries embedded art
+    in the wild, so it's not specially handled -- MutagenFile's generic
+    path below will simply find nothing for it, which is correct).
+    """
+    ext = os.path.splitext(filepath)[1].lower()
+
+    try:
+        if ext == ".mp3":
+            tags = ID3(filepath)
+            for key in tags.keys():
+                if key.startswith("APIC"):
+                    return tags[key].data
+            return None
+
+        if ext == ".flac":
+            audio = FLAC(filepath)
+            if audio.pictures:
+                return audio.pictures[0].data
+            return None
+
+        if ext == ".m4a":
+            audio = MP4(filepath)
+            covr = (audio.tags or {}).get("covr")
+            if covr:
+                return bytes(covr[0])
+            return None
+
+        if ext == ".ogg":
+            audio = OggVorbis(filepath)
+            pics = audio.get("metadata_block_picture")
+            if not pics:
+                return None
+            import base64
+            from mutagen.flac import Picture
+            picture = Picture(base64.b64decode(pics[0]))
+            return picture.data
+
+    except Exception:
+        # Corrupt/partial art data should never crash the Player Screen --
+        # just behave as if there's no art for this track.
+        return None
+
+    return None
+
+
+def get_album_art(filepath: str) -> Optional[QPixmap]:
+    """
+    Returns a square, rounded-corner QPixmap of the track's embedded
+    album art, scaled to fit within MAX_ARTWORK_SIZE, or None if the
+    file has no embedded art / art couldn't be decoded.
+
+    Rounded corners are baked into the returned pixmap itself (rather
+    than left to a QSS border-radius on whatever QLabel displays it) so
+    every call site -- bottom bar, Player Screen, future hover-art
+    previews -- gets visually consistent art with zero extra styling
+    code, and so the corner radius survives QPainter operations like
+    blurred-background extraction (FEATURE_BACKLOG.md item #16) that
+    sample the pixmap directly.
+    """
+    raw_bytes = _extract_raw_art_bytes(filepath)
+    if not raw_bytes:
+        return None
+
+    source = QPixmap()
+    if not source.loadFromData(raw_bytes):
+        return None
+
+    scaled = source.scaled(
+        MAX_ARTWORK_SIZE,
+        MAX_ARTWORK_SIZE,
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+
+    # Center-crop to an exact square (KeepAspectRatioByExpanding can
+    # overshoot one dimension for non-square source art).
+    if scaled.width() != MAX_ARTWORK_SIZE or scaled.height() != MAX_ARTWORK_SIZE:
+        x = max(0, (scaled.width() - MAX_ARTWORK_SIZE) // 2)
+        y = max(0, (scaled.height() - MAX_ARTWORK_SIZE) // 2)
+        scaled = scaled.copy(x, y, MAX_ARTWORK_SIZE, MAX_ARTWORK_SIZE)
+
+    rounded = QPixmap(MAX_ARTWORK_SIZE, MAX_ARTWORK_SIZE)
+    rounded.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(rounded)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(
+        QRectF(0, 0, MAX_ARTWORK_SIZE, MAX_ARTWORK_SIZE),
+        ARTWORK_CORNER_RADIUS,
+        ARTWORK_CORNER_RADIUS,
+    )
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, scaled)
+    painter.end()
+
+    return rounded

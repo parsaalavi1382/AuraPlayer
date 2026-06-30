@@ -14,6 +14,16 @@ are deferred to Step 3/4 once the playback engine exists to actually
 drive "is this row playing" -- right now nothing can ever be playing,
 so building the visualiser would just be inert decoration. The column
 layout already reserves the visual space for it.
+
+Step 3+4 update: Play All / Shuffle now read track order from the
+TABLE MODEL (i.e. whatever order is currently visibly displayed),
+not from LibraryStore.all_tracks() directly. Those previously could
+silently disagree -- all_tracks() returns dict-insertion order, while
+the model may be sorted by a different column -- which meant "Play
+All" could start playing in an order that didn't match what the user
+was looking at. Shuffle still applies its own randomization on top
+once PlaybackEngine.play_all() receives the list; the visible order
+only matters as the STARTING order for shuffle=False.
 """
 
 from __future__ import annotations
@@ -124,10 +134,27 @@ class TracksView(QWidget):
         self.track_double_clicked.emit(track.path)
 
     def _play_all(self, shuffle: bool) -> None:
-        tracks = self.store.all_tracks()
-        if not tracks:
+        """Per the Step 3+4 spec: when shuffle is OFF, the queue must
+        start in the table's CURRENT VISIBLE ORDER -- not the library's
+        raw storage order. self.model already holds tracks in whatever
+        order is currently displayed (it's re-sorted in place by
+        sort_alphabetical() / future column-click sorting), so we read
+        directly from it via track_at() rather than re-querying the
+        store, which would silently reintroduce dict-insertion order.
+
+        Shuffle itself is still performed by PlaybackEngine.play_all()
+        once it receives this list -- this method only controls the
+        STARTING order, which only matters when shuffle=False.
+        """
+        ordered_tracks = [
+            self.model.track_at(row) for row in range(self.model.rowCount())
+        ]
+        ordered_tracks = [t for t in ordered_tracks if t is not None]
+        if not ordered_tracks:
             return
-        paths = [t.path for t in tracks if not t.file_missing]
+        paths = [t.path for t in ordered_tracks if not t.file_missing]
+        if not paths:
+            return
         self.play_all_requested.emit(paths, shuffle)
 
     def _show_context_menu(self, pos) -> None:

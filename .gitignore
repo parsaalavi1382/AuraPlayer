@@ -5,3 +5,5 @@ library_cache.json
 # Python bytecode and cache
 __pycache__/
 *.pyc
+
+test_music/

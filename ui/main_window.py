@@ -1,12 +1,3 @@
-"""
-Main window: top bar + tabs (Tracks/Artists/Albums/Playlists) + always-
-visible bottom bar, per the Main/Menu Screen spec.
-
-This is the Step 2 deliverable's centerpiece -- the first time the
-scanned library data (from Step 1) is visible in the real PyQt6 UI
-rather than printed to a console.
-"""
-
 from __future__ import annotations
 
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTabWidget, QMessageBox, QApplication
@@ -40,13 +31,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # --- Top bar ---
+        # --- Top Bar ---
         self.top_bar = TopBar()
         self.top_bar.settings_clicked.connect(self._open_settings)
         self.top_bar.search_clicked.connect(self._on_search_clicked)
         layout.addWidget(self.top_bar)
 
-        # --- Tabs ---
+        # --- Main Tabs ---
         self.tabs = QTabWidget()
         self.tracks_view = TracksView(self.store)
         self.artists_view = ArtistsView(self.store)
@@ -59,21 +50,13 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.playlists_view, "Playlists")
         layout.addWidget(self.tabs, stretch=1)
 
-        # The empty-state "Open Settings" button (shown when the Tracks
-        # tab has no library yet) calls the exact same _open_settings
-        # method as the ⚙ gear icon below -- not a separate code path,
-        # so the two can never drift apart in behavior.
         self.tracks_view.settings_requested.connect(self._open_settings)
 
-        # --- Bottom bar (always visible) ---
+        # --- Bottom Persistent Transport Bar ---
         self.bottom_bar = BottomBar()
         layout.addWidget(self.bottom_bar)
 
-        # --- Volume + output device control ---
-        # Per spec this lives on the Player Screen (Step 4), bottom-
-        # right, NOT in the Main Menu's bottom bar or top bar. Built and
-        # fully wired to the engine now so Step 4 only needs to place it
-        # in a layout (self.volume_output_control) -- no rewiring.
+        # --- Volume & Output Device Controls ---
         self.volume_output_control = VolumeOutputControl()
         self.volume_output_control.set_volume(self.engine.get_volume())
         self.volume_output_control.set_available_devices(
@@ -83,10 +66,7 @@ class MainWindow(QMainWindow):
         self.volume_output_control.output_device_selected.connect(self.engine.set_output_device)
         self.engine.volume_changed.connect(self.volume_output_control.set_volume)
 
-        # Navigation/playback signals from views. Artist/Album page
-        # navigation isn't built yet (Step 5), so those still surface a
-        # stub -- but playback (double-clicking a track, Play All,
-        # Shuffle) is real now that the engine exists.
+        # --- Signals & Navigation ---
         self.tracks_view.track_double_clicked.connect(self._on_track_double_clicked)
         self.tracks_view.play_all_requested.connect(self._on_play_all_requested)
         self.artists_view.artist_selected.connect(
@@ -96,21 +76,23 @@ class MainWindow(QMainWindow):
             lambda key: self._stub_navigate(f'Album Page: "{key}"')
         )
 
-        # --- Bottom bar transport wiring ---
+        # --- Transport Control Wiring ---
         self.bottom_bar.play_pause_clicked.connect(self.engine.toggle_play_pause)
         self.bottom_bar.next_clicked.connect(self.engine.next_track)
-        self.bottom_bar.previous_clicked.connect(self.engine.previous_track)
+        self.bottom_bar.previous_clicked.connect(self.engine.prev_track)
+
+        # --- Continuous Press-and-Hold Seek Wiring ---
+        self.bottom_bar.next_hold_started.connect(self.engine.start_seek_forward)
+        self.bottom_bar.next_hold_stopped.connect(self.engine.stop_seek)
+        self.bottom_bar.prev_hold_started.connect(self.engine.start_seek_back)
+        self.bottom_bar.prev_hold_stopped.connect(self.engine.stop_seek)
 
         self.engine.track_changed.connect(self._on_engine_track_changed)
         self.engine.playback_state_changed.connect(self._on_engine_playback_state_changed)
         self.engine.position_changed.connect(self.bottom_bar.set_position)
         self.engine.error_occurred.connect(self._on_engine_error)
 
-        # If a track was restored from a previous session (see
-        # PlaybackEngine._restore_initial_state), reflect it in the
-        # bottom bar immediately rather than waiting for the next
-        # track_changed signal, which won't fire again for a track
-        # that's already loaded.
+        # --- Restore Session State ---
         restored_track = self.engine.get_current_track()
         if restored_track:
             self.bottom_bar.set_current_track(restored_track)
@@ -119,14 +101,10 @@ class MainWindow(QMainWindow):
         self._scan_worker: ScanWorker | None = None
         self._progress_dialog: ScanProgressDialog | None = None
 
-        # Make sure the Tracks model's missing-file red matches whatever
-        # theme was loaded from disk on startup -- not just the dark
-        # theme's red, which would otherwise show briefly-but-wrongly
-        # until Settings is reopened.
         startup_theme = THEMES.get(self.store.cache.settings.theme, THEMES[DEFAULT_THEME])
         self.tracks_view.model.set_danger_color(startup_theme["danger"])
 
-    # ---------- Settings / scanning ----------
+    # ---------- Settings & Library Scanning ----------
 
     def _open_settings(self) -> None:
         dialog = SettingsDialog(self.store, self)
@@ -136,16 +114,9 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _apply_theme(self, theme_key: str) -> None:
-        """Re-applies the global stylesheet immediately -- no restart,
-        no re-opening Settings needed to see the change take effect.
-        """
         app = QApplication.instance()
         if app is not None:
             app.setStyleSheet(build_stylesheet(theme_key))
-        # The missing-file red in the Tracks table is theme-dependent
-        # (each theme defines its own danger color), so push it into
-        # the model rather than leave the row painted in the old
-        # theme's red after switching.
         theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
         self.tracks_view.model.set_danger_color(theme["danger"])
 
@@ -162,13 +133,7 @@ class MainWindow(QMainWindow):
             self._progress_dialog.close()
             self._progress_dialog = None
 
-        # The worker mutated cache directly (it's running on the cache
-        # object, not through LibraryStore's mutators, since it's off-
-        # thread and we don't want to emit Qt signals from a worker
-        # thread into widgets directly). Refresh all views now that
-        # we're back on the main thread.
         self._refresh_all_views()
-
         msg = f"Scan complete.\n\nNew tracks: {summary['added']}\nAlready in library: {summary['skipped']}"
         if summary["missing"]:
             msg += f"\nMissing files flagged: {len(summary['missing'])}"
@@ -180,19 +145,23 @@ class MainWindow(QMainWindow):
         self.albums_view.refresh()
         self.playlists_view.refresh()
 
-    # ---------- Playback (real, via PlaybackEngine) ----------
+    # ---------- Playback Management ----------
 
     def _on_track_double_clicked(self, track_path: str) -> None:
-        """Double-clicking a track in the Tracks view starts a fresh
-        queue of the library's current track order, beginning playback
-        at the clicked track -- matches "clicking any track starts
-        playback" from the spec. (A full Player Screen to navigate to
-        is still Step 4; for now this only starts playback.)
-        """
-        all_paths = [t.path for t in self.store.all_tracks() if not t.file_missing]
+        """Handles manual track selection from the visible table list view."""
+        model = self.tracks_view.model
+        ordered_tracks = [model.track_at(row) for row in range(model.rowCount())]
+        all_paths = [t.path for t in ordered_tracks if t is not None and not t.file_missing]
+        
         if track_path not in all_paths:
             return
-        self.engine.play_all(all_paths, shuffle=False, start_track_path=track_path)
+            
+        current_shuffle = self.engine.get_shuffle()
+        self.engine.play_all(
+            all_paths, 
+            shuffle=current_shuffle, 
+            start_track_path=track_path
+        )
 
     def _on_play_all_requested(self, paths: list[str], shuffle: bool) -> None:
         self.engine.play_all(paths, shuffle=shuffle)
@@ -214,7 +183,7 @@ class MainWindow(QMainWindow):
             f'Could not play "{name}".\n\n{message}'
         )
 
-    # ---------- Stubs for not-yet-built screens ----------
+    # ---------- Navigation UI Stubs ----------
 
     def _stub_navigate(self, where: str) -> None:
         QMessageBox.information(
@@ -225,6 +194,5 @@ class MainWindow(QMainWindow):
     def _on_search_clicked(self) -> None:
         QMessageBox.information(
             self, "Coming in Step 9",
-            "Search across Tracks/Artists/Albums/Playlists is built in Step 9, "
-            "once all four views and their data are stable."
+            "Global database search functionality lands in Step 9."
         )
