@@ -11,7 +11,7 @@ import random
 import os
 from typing import Optional
 
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QUrl
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QUrl, Qt
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices, QAudioDevice
 
 # Assuming these exist in your project structure
@@ -89,9 +89,6 @@ class PlaybackEngine(QObject):
         self._save_timer.timeout.connect(self._persist_position)
         self._save_timer.start()
 
-        # Restore the last session's track + position
-        self._restore_initial_state(state)
-
         # --- Explicit Macro State Machine ---
         # States: "stop_initial", "playing", "paused", "scrubbing", "stop_end"
         self._macro_state: str = "stop_initial"
@@ -109,6 +106,20 @@ class PlaybackEngine(QObject):
         self._burst_cutoff_timer = QTimer(self)
         self._burst_cutoff_timer.setSingleShot(True)
         self._burst_cutoff_timer.timeout.connect(self._on_burst_cutoff)
+
+        # Precise gapless scheduler timer
+        self._handoff_timer = QTimer(self)
+        self._handoff_timer.setSingleShot(True)
+        self._handoff_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._handoff_timer.timeout.connect(self._perform_gapless_handoff)
+
+        # Clean-up timer to stop and mute the old player after a small overlap
+        self._old_player_cleanup_timer = QTimer(self)
+        self._old_player_cleanup_timer.setSingleShot(True)
+        self._old_player_cleanup_timer.timeout.connect(self._cleanup_old_player)
+
+        # Restore the last session's track + position
+        self._restore_initial_state(state)
 
     # ============================================================
     # State Machine Authority (Single Source of Truth)
@@ -171,6 +182,7 @@ class PlaybackEngine(QObject):
     def pause(self) -> None:
         self._active.pause()
         self._save_timer.stop()
+        self._handoff_timer.stop()
         self._update_macro_state("paused")
 
     def toggle_play_pause(self) -> None:
@@ -184,6 +196,8 @@ class PlaybackEngine(QObject):
 
     def stop(self) -> None:
         self.force_reset_seek_state()
+        self._handoff_timer.stop()
+        self._handoff_armed = False
         self._active.stop()
         self._standby.stop()
         self._save_timer.stop()
@@ -192,7 +206,8 @@ class PlaybackEngine(QObject):
 
     def seek(self, position_seconds: float) -> None:
         self._active.setPosition(int(position_seconds * 1000))
-        self._handoff_armed = False
+        self._handoff_armed = True
+        self._handoff_timer.stop()
 
     def next_track(self) -> None:
         if not self._queue:
@@ -340,6 +355,10 @@ class PlaybackEngine(QObject):
     def force_reset_seek_state(self) -> None:
         self._seek_timer.stop()
         self._burst_cutoff_timer.stop()
+        self._handoff_timer.stop()
+        self._old_player_cleanup_timer.stop()
+        self._standby.stop()
+        self._standby_output.setVolume(0.0)
         self._is_seeking = False
         self._was_playing_before_seek = False
 
@@ -569,6 +588,7 @@ class PlaybackEngine(QObject):
             return
         self._active.setSource(QUrl.fromLocalFile(track_path))
         self._handoff_armed = True
+        self._handoff_timer.stop()
 
     def _preload_standby(self) -> None:
         next_index = self._compute_next_index(self._queue_index)
@@ -622,12 +642,36 @@ class PlaybackEngine(QObject):
             return None
         return prev_idx
 
+    def _disconnect_signals(self, player) -> None:
+        for signal, slot in (
+            (player.positionChanged, self._on_position_changed),
+            (player.durationChanged, self._on_duration_changed),
+            (player.mediaStatusChanged, self._on_media_status_changed),
+            (player.playbackStateChanged, self._on_playback_state_changed),
+            (player.errorOccurred, self._on_error),
+        ):
+            try:
+                signal.disconnect(slot)
+            except TypeError:
+                pass
+
     def _perform_gapless_handoff(self) -> None:
+        if not self._handoff_armed:
+            return
+        self._handoff_armed = False
+
         self.force_reset_seek_state()
+        self._handoff_timer.stop()
+        self._old_player_cleanup_timer.stop()
 
+        # Cleanly disconnect the old active player signals before swapping
+        self._disconnect_signals(self._active)
+
+        # Let the standby player output take the current playback volume
         self._standby_output.setVolume(self._volume)
-        self._active_output.setVolume(0.0)
 
+        # Swap active and standby players and outputs.
+        # Note: the old active player keeps playing at its current volume for the brief overlap.
         self._active, self._standby = self._standby, self._active
         self._active_output, self._standby_output = self._standby_output, self._active_output
 
@@ -649,23 +693,24 @@ class PlaybackEngine(QObject):
             self._persist_queue()
             self.track_changed.emit(self._queue[next_index])
             
-        self._handoff_armed = False
+        self._handoff_armed = True
+        
+        # Schedule the clean-up (mute and stop) of the old active player (now self._standby) after a short overlap
+        self._old_player_cleanup_timer.start(250)
+
+    def _cleanup_old_player(self) -> None:
+        self._standby_output.setVolume(0.0)
+        self._standby.stop()
         self._preload_standby()
 
     def _connect_active_signals(self) -> None:
+        self._disconnect_signals(self._active)
         player = self._active
-        for signal, slot in (
-            (player.positionChanged, self._on_position_changed),
-            (player.durationChanged, self._on_duration_changed),
-            (player.mediaStatusChanged, self._on_media_status_changed),
-            (player.playbackStateChanged, self._on_playback_state_changed),
-            (player.errorOccurred, self._on_error),
-        ):
-            try:
-                signal.disconnect(slot)
-            except TypeError:
-                pass
-            signal.connect(slot)
+        player.positionChanged.connect(self._on_position_changed)
+        player.durationChanged.connect(self._on_duration_changed)
+        player.mediaStatusChanged.connect(self._on_media_status_changed)
+        player.playbackStateChanged.connect(self._on_playback_state_changed)
+        player.errorOccurred.connect(self._on_error)
 
     # ============================================================
     # QMediaPlayer signal handlers
@@ -677,9 +722,15 @@ class PlaybackEngine(QObject):
         duration_ms = self._active.duration()
         if duration_ms > 0:
             time_remaining = duration_ms - position_ms
-            if time_remaining <= GAPLESS_HANDOFF_LEAD_MS:
-                self._perform_gapless_handoff()
-                return
+            
+            # Dynamic lookahead scheduling
+            next_index = self._compute_next_index(self._queue_index)
+            if next_index is not None and self._handoff_armed:
+                if time_remaining <= 1500:
+                    # Lead-time of 250ms handles the QMediaPlayer start/decode latency and overlap
+                    lead_time = 250
+                    target_delay = max(0, time_remaining - lead_time)
+                    self._handoff_timer.start(int(target_delay))
 
         self.position_changed.emit(position_ms / 1000.0, duration_ms / 1000.0)
 
@@ -694,14 +745,13 @@ class PlaybackEngine(QObject):
             self._duration_seconds = self._active.duration() / 1000.0
             self.position_changed.emit(self._active.position() / 1000.0, self._duration_seconds)
         elif status == QMediaPlayer.MediaStatus.EndOfMedia:
-            if not self._handoff_armed:
-                next_index = self._compute_next_index(self._queue_index)
-                if next_index is None:
-                    self._update_macro_state("stop_end")
-                    self._active.stop()
-                    self._save_timer.stop()
-                else:
-                    self._play_queue_index(next_index)
+            next_index = self._compute_next_index(self._queue_index)
+            if next_index is None:
+                self._update_macro_state("stop_end")
+                self._active.stop()
+                self._save_timer.stop()
+            else:
+                self._play_queue_index(next_index)
 
     def _on_error(self, error, error_string: str) -> None:
         current_path = self.get_current_track_path() or "Unknown Track"
