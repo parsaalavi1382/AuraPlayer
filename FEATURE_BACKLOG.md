@@ -95,6 +95,8 @@ count, last played, etc.) as JSON or CSV.
 Settings is stable, likely alongside or after Step 9.
 
 ## 12. Volume control (Player Screen, bottom right)
+**Status:** ✅ COMPLETED
+
 A volume slider in the Player Screen, opposite side from the other
 bottom controls.
 
@@ -124,6 +126,8 @@ of which flavor is chosen) for the engine method, Step 4 (Player Screen)
 for the actual slider UI.
 
 ## 13. Output device selector (Player Screen, next to volume)
+**Status:** ✅ COMPLETED
+
 Dropdown/button to choose which audio output device to play through
 (speakers, headphones, etc.), using `QAudioDevice` to enumerate the
 system's available output devices -- this part of the original request
@@ -157,6 +161,8 @@ wires a second open/close trigger in the Step 2 top bar, and the
 top-bar layout itself (`[⚙] [📋] [🔍]`) gets updated at that point.
 
 ## 15. Gapless playback
+**Status:** ✅ COMPLETED
+
 Pre-load the next track at ~95% completion of the current one, so there's
 no audible silence/gap between tracks -- important for concept albums
 and continuous mixes.
@@ -185,6 +191,8 @@ twice. Step 4's Player Screen is the first place this would show up
 concretely (album art transitions, lyrics/queue panel slides).
 
 ## 18. Custom transport controls + smart Next/Prev behavior
+**Status:** ✅ COMPLETED
+
 Replace the current placeholder emoji buttons (▶ ⏮ ⏭) with proper
 anti-aliased SVG/vector icons matching AuraPlayer's styling. Plus:
 - Long-press Next/Prev fast-forwards/rewinds (seeks) through the

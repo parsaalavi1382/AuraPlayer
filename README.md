@@ -1,6 +1,6 @@
 # AuraPlayer — Modern Offline Native Audio Player
 
-AuraPlayer is a native offline-first music player built with Python and PyQt6, featuring a gorgeous, theme-adaptive user interface, gapless audio playback, and comprehensive dynamic navigation pages (Artist, Album, and Genre pages).
+AuraPlayer is a native offline-first music player featuring a gorgeous, theme-adaptive design, continuous music playback with no silence between tracks, and comprehensive dynamic pages to easily explore your music collection.
 
 ---
 
@@ -15,36 +15,38 @@ AuraPlayer is **currently in progress and is not yet fully completed**. Core pla
 ## 🎨 What AuraPlayer Does Right Now
 
 ### 1. Dynamic Pages & Rich Navigation (Featuring Smart Multi-Artist Support)
-* **Smart Multi-Artist & Separator Support:** Features an intelligent music library organizer. It automatically parses common artist separators (like `,`, `&`, `feat.`, `ft.`) to split tracks and neatly display them under the individual profile of each contributing artist, keeping your collection perfectly organized.
-* **Artist Page:** Dedicated view showing stats, list of albums released by the artist, contributor/guest tracks ("Appears On"), and a complete track table.
-* **Album Page:** Gorgeous custom album details view. Displays large cover art, stats, release year, and album artists (clickable buttons). Tracks are automatically grouped by disc number (perfect for multi-disc releases).
-* **Genre Page:** Dynamically filters tracks by selected genre, featuring instant "Play Genre" and "Shuffle" controls.
-* **Genres Tab:** Alpha-sorted main list of all genres in your music library with track counts.
-* **Aesthetic Tab Titles:** Newly opened dynamic pages display clean, professional titles like `Artist Name | Artist`, `Album Name | Album`, or `Genre Name | Genre`.
-* **Smart Closable Tabs:** Dynamic tabs are equipped with an "X" close button, while permanent core navigation tabs (Tracks, Artists, Genres, Albums, Playlists) are locked in place.
-* **Underlined Hover & Interactivity:** Hovering over artist or album names anywhere in the app displays elegant underlines with pointing-hand feedback; clicking them takes you directly to their dedicated pages.
+* **Smart Multi-Artist Support:** Features an intelligent music organizer. It automatically splits collaborating artists (separated by characters or words like commas, ampersands, or "feat.") so that songs neatly appear under the individual profile of every contributing artist.
+* **Artist Page:** Shows helpful statistics (like total track counts), a list of albums they released, a contributor section ("Appears On") for guest features, and a complete table of their tracks. Albums and guest features are laid out in a clean, wrapping grid that automatically resizes to fit your window, similar to photo grids on social media.
+* **Album Page:** Displays a gorgeous view with large cover art, year of release, total duration, and clickable artist buttons. Tracks are automatically grouped by disc numbers. Additionally, track numbers morph into a play button when you hover, and transform into a lively dancing music equalizer during active playback.
+* **Genre Page:** Displays songs filtered by selected genre, featuring instant play and shuffle controls.
+* **Genres Tab:** A complete, alphabetically sorted list of all genres in your music library with track counts.
+* **Aesthetic Tab Titles:** Dynamic pages display clean, professional titles like `Artist Name | Artist`, `Album Name | Album`, or `Genre Name | Genre`.
+* **Smart Closable Tabs:** Dynamically opened pages can be closed with an "X" button, while permanent main navigation tabs (Tracks, Artists, Genres, Albums, Playlists) are securely locked in place.
+* **Underlined Hover Feedback:** Hovering over artist or album names anywhere in the app displays elegant underlines with pointing-hand feedback; clicking them takes you directly to their dedicated pages.
 
 ### 2. Cover Art with Active Playback States in Tracks List
-* Tracks list displays high-quality embedded album covers (or custom theme-adaptive placeholders).
-* **State A (PLAYING):** Covers dim slightly and display a beautiful, dynamically-pulsing 3-bar equalizer animation.
-* **State B (PAUSED + HOVER):** Covers dim and display an overlaid "▶" play icon.
-* **State C (PAUSED + NO HOVER):** Covers render at full brightness with no overlays.
+* Displays high-quality album covers or beautiful theme-matching fallbacks.
+* **State A (PLAYING):** Cover art dims slightly and displays a beautiful, pulsing 3-bar animated equalizer.
+* **State B (PAUSED + HOVER):** Cover art dims and displays an overlaid "▶" play icon.
+* **State C (PAUSED + NO HOVER):** Cover art renders at full brightness with no overlays.
 
-### 3. Solid Audio Playback Engine (Gapless Audio Player)
-* Built on PyQt6's `QMediaPlayer` with a modern FFmpeg backend supporting `.mp3`, `.flac`, `.m4a`, `.wav`, and `.ogg`.
-* **Gapless Playback:** Preloads the upcoming track in a secondary background player to hand off seamlessly at ~95% duration with no audible gap. Perfect for continuous audio files and live albums.
-* **Smart Transport Controls:** Precise single-clicks for track-skipping, press-and-hold for continuous scrubbing, and "Smart Prev" (restarts the track if played past 3 seconds, otherwise skips to the actual previous track).
-* **Persistent Play State:** Automatically remembers your queue, active track, and exact playback position (within ~1 second accuracy) across restarts so you can resume listening instantly.
-* **Output Device & Volume Persistence:** Change volume or choose headphones/speakers directly from the Player Screen. Settings are remembered across restarts, with graceful fallback to the default device if headphones are unplugged.
+### 3. Advanced Audio Player Engine
+* Plays popular music formats including `.mp3`, `.flac`, `.m4a`, `.wav`, and `.ogg` files.
+* **Silence-Free Playback:** Automatically preloads the next song in the background to hand off seamlessly near the end of the current track, ensuring no silent gaps between songs.
+* **Smart Music Controls:** Precise single-clicks for track skipping, press-and-hold for continuous fast-forward or rewind (seeking) inside a song, and a smart rewind button (restarts the current song if played past 3 seconds; otherwise skips to the actual previous song).
+* **Remember Play State:** Automatically remembers your queue, active song, volume level, and exact listening position across restarts so you can resume listening instantly.
+* **Volume & Output Selector:** Change your volume or choose headphones/speakers directly from the player screen. Settings are remembered across restarts, with an automatic fallback to the default device if headphones are unplugged. Includes an intuitive speaker icon that toggles quick muting and unmuting.
 
-### 4. Background Threaded Scanner & JSON Cache
-* Folder scanner runs entirely on a background `QThread` multi-threaded scanner with an elegant progress dialog so the UI never freezes.
-* Uses **atomic writes** (`os.replace`) to prevent database corruption during writes.
-* Performs intelligent deduplication and handles missing files gracefully (missing files turn red in the Tracks list; clicking them alerts the user instead of crashing).
+### 4. Smart Library Scanner & Secure Storage
+* **Background Scanning:** Scans your selected music folders on a background worker with an elegant progress screen, meaning your app stays fast and responsive with absolutely no freezing.
+* **Secure Storage Protection:** Automatically saves your library state safely, making sure a sudden computer shutdown or app crash never corrupts or loses your music collection.
+* **Smart Duplication Prevention:** Automatically avoids duplicates when you rescan folders.
+* **Missing File Safeguards:** If you delete or move a file outside the app, its row turns red in the Tracks list. Clicking it shows a helpful warning rather than crashing.
 
-### 5. Adaptive Aesthetic Themes
-* Features immediate, single-click theme switching in Settings: **Dark (default)**, **Light**, **Midnight Blue**, and **Warm Amber**.
-* The entire stylesheet re-renders in real-time without requiring a restart, and your selection is saved.
+### 5. Personalization & Settings
+* **Real-Time Themes:** Features immediate, single-click theme switching in Settings: **Dark (default)**, **Light**, **Midnight Blue**, and **Warm Amber**. The entire design updates instantly without needing to restart.
+* **Custom Separation Manager:** In the settings screen, you can easily add, edit, or toggle the specific words or symbols (like commas or 'feat.') that AuraPlayer uses to split multiple artists, giving you ultimate control over how your library is organized.
+* **Remembers Window Preferences:** AuraPlayer automatically remembers your window size, position, and layout preferences across restarts, so it always reopens exactly how you left it.
 
 ---
 
@@ -74,27 +76,29 @@ Before installing packages or running the app, you must activate the virtual env
 * **On macOS / Linux (Terminal):**
     ```bash
     source venv/bin/activate
-    ``'
+    ```
 
 *(Once activated, you will see `(venv)` prepended to your command line prompt.)*
 
 ### 3. Install Dependencies
-Install all required third-party libraries (including `PyQt6` and `mutagen`) using pip:
+Install all required third-party libraries (including those for window styling and music file parsing) using pip:
 
 ```bash
 pip install -r requirements.txt
 ```
-4. Run the Application
+
+### 4. Run the Application
 Start the AuraPlayer application by executing the main script:
 
-```Bash
+```bash
 python main.py
 ```
-🎵 Getting Started with Music
-When you first launch AuraPlayer, your library will be empty.
 
-Click the ⚙ (Settings) icon in the top-right corner.
+---
 
-Click Add Folder and select the bundled test_music/ folder (which contains 8 tagged test files of different formats) or point it at your real music library.
+## 🎵 Getting Started with Music
 
-The progress dialog will show the scanning status. Once completed, your Tracks, Artists, Genres, and Albums tabs will be fully populated!
+1. When you first launch AuraPlayer, your library will be empty.
+2. Click the **⚙ (Settings)** icon in the top-right corner.
+3. Click **Add Folder** and select the bundled `test_music/` folder (which contains 8 tagged test files of different formats) or point it at your real music library.
+4. The progress dialog will show the scanning status. Once completed, your Tracks, Artists, Genres, and Albums tabs will be fully populated!
