@@ -74,7 +74,7 @@ Before installing packages or running the app, you must activate the virtual env
 * **On macOS / Linux (Terminal):**
     ```bash
     source venv/bin/activate
-    ```
+    ``'
 
 *(Once activated, you will see `(venv)` prepended to your command line prompt.)*
 
@@ -83,11 +83,13 @@ Install all required third-party libraries (including `PyQt6` and `mutagen`) usi
 
 ```bash
 pip install -r requirements.txt
+```
 4. Run the Application
 Start the AuraPlayer application by executing the main script:
 
-Bash
+```Bash
 python main.py
+```
 🎵 Getting Started with Music
 When you first launch AuraPlayer, your library will be empty.
 
