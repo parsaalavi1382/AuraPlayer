@@ -139,5 +139,5 @@ Contributions, feature ideas, and bug reports are highly welcome!
 
 ## 📄 License
 
-This project is open-source and available under the [MIT License](https://www.google.com/search?q=LICENSE).
+This project is open-source and available under the [MIT License](LICENSE.md).
 
