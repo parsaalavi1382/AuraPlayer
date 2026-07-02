@@ -28,15 +28,19 @@ only matters as the STARTING order for shuffle=False.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
+import math
+import time
+
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect, QEvent, QObject, QTimer, QRectF
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableView, QPushButton, QMenu,
     QHeaderView, QStackedWidget, QMessageBox, QAbstractItemView,
+    QStyledItemDelegate, QStyle, QStyleOptionViewItem,
 )
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QFont, QColor, QPainter, QPainterPath, QBrush, QPen, QPixmap
 
 from core.library_store import LibraryStore
-from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_DURATION
+from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_GENRE, COL_DURATION
 from ui.widgets.empty_state import EmptyStateWidget
 
 
@@ -44,12 +48,14 @@ class TracksView(QWidget):
     track_double_clicked = pyqtSignal(str)   # track path -> go to Player Screen
     album_requested = pyqtSignal(str)         # album_key -> go to Album page
     artist_requested = pyqtSignal(str)        # artist name -> go to Artist page
+    genre_requested = pyqtSignal(str)         # genre name -> go to Genre page
     play_all_requested = pyqtSignal(list, bool)  # track paths, shuffle
     settings_requested = pyqtSignal()         # "Open Settings" empty-state button clicked
 
-    def __init__(self, store: LibraryStore, parent=None):
+    def __init__(self, store: LibraryStore, engine=None, parent=None):
         super().__init__(parent)
         self.store = store
+        self.engine = engine
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 0)
@@ -88,15 +94,34 @@ class TracksView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(40) # Comfortable row height for album art
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(COL_TITLE, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_ARTISTS, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_GENRE, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_DURATION, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._show_context_menu)
         self.table.doubleClicked.connect(self._on_row_double_clicked)
+        
+        self.delegate = TrackHoverDelegate(self.table, self)
+        self.table.setItemDelegate(self.delegate)
+        self.table.setMouseTracking(True)
+        self.hover_filter = HoverEventFilter(self.table, self.delegate, self)
+        self.table.viewport().installEventFilter(self.hover_filter)
+        
         self.stack.addWidget(self.table)
+
+        # --- Animation timer for Equalizer ---
+        self.animation_timer = QTimer(self)
+        self.animation_timer.setInterval(120)  # ~8 fps
+        self.animation_timer.timeout.connect(self._on_animation_tick)
+        
+        if self.engine:
+            self.engine.playback_state_changed.connect(self._on_playback_changed)
+            self.engine.track_changed.connect(self._on_playback_changed)
 
         # --- Wire to store ---
         self.store.tracks_added.connect(self._on_tracks_changed)
@@ -104,6 +129,22 @@ class TracksView(QWidget):
         self.store.track_updated.connect(self._on_tracks_changed)
 
         self.refresh()
+        self._update_animation_timer()
+
+    def _on_playback_changed(self, *args) -> None:
+        self.table.viewport().update()
+        self._update_animation_timer()
+
+    def _on_animation_tick(self) -> None:
+        self.table.viewport().update()
+
+    def _update_animation_timer(self) -> None:
+        if self.engine and self.engine.is_playing():
+            if not self.animation_timer.isActive():
+                self.animation_timer.start()
+        else:
+            if self.animation_timer.isActive():
+                self.animation_timer.stop()
 
     # ---------- Data refresh ----------
 
@@ -118,6 +159,9 @@ class TracksView(QWidget):
 
     def _on_tracks_changed(self, *_args) -> None:
         self.refresh()
+
+    def _on_header_clicked(self, index: int) -> None:
+        self.model.sort_alphabetical(index)
 
     # ---------- Interactions ----------
 
@@ -202,3 +246,460 @@ class TracksView(QWidget):
             "Playlists are built in Step 7. This menu item will let you add this "
             "track to one once playlists exist."
         )
+
+
+class TrackHoverDelegate(QStyledItemDelegate):
+    def __init__(self, table, parent=None):
+        super().__init__(parent)
+        self.table = table
+        self.view = parent
+        self.mouse_pos = QPoint(-1, -1)
+        self.hovered_row = -1
+        self.art_cache = {}
+        
+    def set_mouse_pos(self, pos: QPoint):
+        self.mouse_pos = pos
+        
+    def clear_mouse_pos(self):
+        self.mouse_pos = QPoint(-1, -1)
+
+    def paint(self, painter, option, index):
+        col = index.column()
+        if col not in (COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_GENRE):
+            super().paint(painter, option, index)
+            return
+
+        from ui.theme import THEMES, DEFAULT_THEME
+        theme_key = self.view.store.cache.settings.theme
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+
+        if col == COL_TITLE:
+            # Prepare style option
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            opt.text = "" # Clear text so PE_PanelItemViewItem doesn't draw it
+            
+            widget = option.widget
+            style = widget.style() if widget else None
+            if style:
+                style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, opt, painter, widget)
+                
+            track = index.data(Qt.ItemDataRole.UserRole)
+            if not track:
+                super().paint(painter, option, index)
+                return
+                
+            painter.save()
+            
+            # Dimensions
+            cover_size = 28
+            cover_x = option.rect.left() + 10
+            cover_y = option.rect.top() + (option.rect.height() - cover_size) // 2
+            cover_rect = QRect(cover_x, cover_y, cover_size, cover_size)
+            
+            # 1. Cache & Load scaled art
+            if track.path not in self.art_cache:
+                from core.metadata_reader import get_album_art
+                raw_pixmap = get_album_art(track.path)
+                if raw_pixmap and not raw_pixmap.isNull():
+                    scaled = raw_pixmap.scaled(
+                        cover_size, cover_size,
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    self.art_cache[track.path] = scaled
+                else:
+                    self.art_cache[track.path] = None
+                    
+            pixmap = self.art_cache[track.path]
+            
+            # Determine states
+            is_current = False
+            is_playing = False
+            if self.view.engine:
+                is_current = (self.view.engine.get_current_track_path() == track.path)
+                is_playing = is_current and self.view.engine.is_playing()
+                
+            is_row_hovered = (index.row() == self.hovered_row)
+            
+            # Get theme colors
+            bg_color = QColor(theme['surface'])
+            text_color = QColor(theme['text_secondary'])
+            
+            # Draw album cover/placeholder
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            clip_path = QPainterPath()
+            clip_path.addRoundedRect(QRectF(cover_rect), 4.0, 4.0)
+            
+            painter.save()
+            painter.setClipPath(clip_path)
+            if pixmap:
+                painter.drawPixmap(cover_rect, pixmap)
+            else:
+                painter.fillRect(cover_rect, bg_color)
+                font = QFont()
+                font.setPointSize(10)
+                font.setBold(True)
+                painter.setFont(font)
+                painter.setPen(text_color)
+                painter.drawText(cover_rect, Qt.AlignmentFlag.AlignCenter, "♪")
+            painter.restore()
+            
+            # Dark overlay if playing or hovered
+            if is_playing or is_row_hovered:
+                painter.save()
+                painter.setClipPath(clip_path)
+                painter.fillRect(cover_rect, QColor(0, 0, 0, 110))
+                painter.restore()
+                
+            # Equalizer or Play icon overlay
+            if is_playing:
+                # Equalizer animation (State A)
+                max_bar_h = 12
+                bar_w = 3
+                spacing = 2
+                eq_x = cover_rect.left() + (cover_size - (3 * bar_w + 2 * spacing)) // 2
+                eq_y = cover_rect.top() + (cover_size - max_bar_h) // 2
+                
+                t = time.time()
+                h1 = 0.2 + 0.7 * abs(math.sin(t * 9.0))
+                h2 = 0.3 + 0.6 * abs(math.sin(t * 13.0 + 1.5))
+                h3 = 0.1 + 0.8 * abs(math.sin(t * 7.5 + 3.0))
+                
+                heights = [h1 * max_bar_h, h2 * max_bar_h, h3 * max_bar_h]
+                
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(QColor("#FFFFFF")))
+                for i, h in enumerate(heights):
+                    x = eq_x + i * (bar_w + spacing)
+                    y = (eq_y + max_bar_h) - h
+                    painter.drawRect(QRectF(x, y, bar_w, h))
+                painter.restore()
+                
+            elif is_row_hovered:
+                # Play icon (State B)
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                font = QFont()
+                font.setPointSize(9)
+                font.setBold(True)
+                painter.setFont(font)
+                painter.setPen(QColor("#FFFFFF"))
+                play_rect = cover_rect.adjusted(1, 0, 0, 0)
+                painter.drawText(play_rect, Qt.AlignmentFlag.AlignCenter, "▶")
+                painter.restore()
+                
+            # Now draw the track title text on the right
+            text_rect = option.rect.adjusted(cover_size + 18, 0, -6, 0)
+            
+            if option.state & QStyle.StateFlag.State_Selected:
+                title_color = option.palette.highlightedText().color()
+            else:
+                title_color = option.palette.text().color()
+                fg = index.data(Qt.ItemDataRole.ForegroundRole)
+                if fg:
+                    title_color = fg.color()
+                    
+            painter.setPen(title_color)
+            
+            fm = option.fontMetrics
+            y_baseline = text_rect.top() + (text_rect.height() + fm.ascent() - fm.descent()) // 2
+            
+            title_text = track.title or "Unknown Title"
+            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, text_rect.width())
+            
+            font = painter.font()
+            if is_current:
+                font.setBold(True)
+                if not (option.state & QStyle.StateFlag.State_Selected):
+                    painter.setPen(QColor(theme['accent']))
+            else:
+                font.setBold(False)
+            painter.setFont(font)
+            
+            painter.drawText(text_rect.left(), y_baseline, elided_title)
+            
+            painter.restore()
+            return
+
+        # Prepare a copy of the option without text
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = "" # Clear the text so it doesn't paint twice
+        
+        # Draw standard background/selection/etc. using primitive panel drawing instead of super().paint()
+        # This prevents the base implementation from calling initStyleOption internally and re-drawing the text
+        widget = option.widget
+        style = widget.style() if widget else None
+        if style:
+            style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, opt, painter, widget)
+
+        # Now paint our text
+        painter.save()
+        
+        # Determine text color based on selection state
+        if option.state & QStyle.StateFlag.State_Selected:
+            text_color = option.palette.highlightedText().color()
+        else:
+            text_color = option.palette.text().color()
+            # If there's an explicit foreground role:
+            fg = index.data(Qt.ItemDataRole.ForegroundRole)
+            if fg:
+                text_color = fg.color()
+                
+        painter.setPen(text_color)
+        
+        # Determine if mouse is over this cell
+        is_hovered = option.rect.contains(self.mouse_pos)
+        
+        # Indent slightly (e.g. 6px matching other cells)
+        rect = option.rect.adjusted(6, 0, -6, 0)
+        
+        fm = option.fontMetrics
+        y_baseline = rect.top() + (rect.height() + fm.ascent() - fm.descent()) // 2
+
+        if col == COL_ARTISTS:
+            artists_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+            artists = [a.strip() for a in artists_text.split(",") if a.strip()]
+            
+            x_offset = rect.left()
+            for i, artist in enumerate(artists):
+                artist_width = fm.horizontalAdvance(artist)
+                artist_rect = QRect(x_offset, rect.top(), artist_width, rect.height())
+                
+                artist_hovered = is_hovered and artist_rect.contains(self.mouse_pos)
+                
+                font = painter.font()
+                font.setUnderline(artist_hovered)
+                painter.setFont(font)
+                
+                if artist_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                    painter.setPen(QColor(theme['accent']))
+                else:
+                    painter.setPen(text_color)
+                
+                painter.drawText(x_offset, y_baseline, artist)
+                x_offset += artist_width
+                
+                if i < len(artists) - 1:
+                    comma = ", "
+                    comma_width = fm.horizontalAdvance(comma)
+                    font.setUnderline(False)
+                    painter.setFont(font)
+                    painter.setPen(text_color)
+                    painter.drawText(x_offset, y_baseline, comma)
+                    x_offset += comma_width
+                    
+        elif col == COL_ALBUM:
+            album_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+            album_width = fm.horizontalAdvance(album_text)
+            album_rect = QRect(rect.left(), rect.top(), album_width, rect.height())
+            
+            album_hovered = is_hovered and album_rect.contains(self.mouse_pos)
+            
+            font = painter.font()
+            font.setUnderline(album_hovered)
+            painter.setFont(font)
+            
+            if album_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                painter.setPen(QColor(theme['accent']))
+            else:
+                painter.setPen(text_color)
+            
+            painter.drawText(rect.left(), y_baseline, album_text)
+
+        elif col == COL_GENRE:
+            genre_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+            if genre_text and genre_text != "—":
+                genres = [g.strip() for g in genre_text.split(",") if g.strip()]
+                x_offset = rect.left()
+                for i, genre in enumerate(genres):
+                    genre_width = fm.horizontalAdvance(genre)
+                    genre_rect = QRect(x_offset, rect.top(), genre_width, rect.height())
+                    
+                    genre_hovered = is_hovered and genre_rect.contains(self.mouse_pos)
+                    
+                    font = painter.font()
+                    font.setUnderline(genre_hovered)
+                    painter.setFont(font)
+                    
+                    if genre_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                        painter.setPen(QColor(theme['accent']))
+                    else:
+                        painter.setPen(text_color)
+                        
+                    painter.drawText(x_offset, y_baseline, genre)
+                    x_offset += genre_width
+                    
+                    if i < len(genres) - 1:
+                        comma = ", "
+                        comma_width = fm.horizontalAdvance(comma)
+                        font.setUnderline(False)
+                        painter.setFont(font)
+                        painter.setPen(text_color)
+                        painter.drawText(x_offset, y_baseline, comma)
+                        x_offset += comma_width
+            else:
+                painter.drawText(rect.left(), y_baseline, "—")
+
+        painter.restore()
+
+    def is_over_clickable_text(self, index, pos) -> bool:
+        col = index.column()
+        if col not in (COL_ARTISTS, COL_ALBUM, COL_GENRE):
+            return False
+            
+        rect = self.table.visualRect(index).adjusted(6, 0, -6, 0)
+        if not rect.contains(pos):
+            return False
+            
+        fm = self.table.fontMetrics()
+        
+        if col == COL_ARTISTS:
+            artists_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+            artists = [a.strip() for a in artists_text.split(",") if a.strip()]
+            
+            x_offset = rect.left()
+            for i, artist in enumerate(artists):
+                artist_width = fm.horizontalAdvance(artist)
+                artist_rect = QRect(x_offset, rect.top(), artist_width, rect.height())
+                if artist_rect.contains(pos):
+                    return True
+                x_offset += artist_width
+                if i < len(artists) - 1:
+                    x_offset += fm.horizontalAdvance(", ")
+                    
+        elif col == COL_ALBUM:
+            album_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+            album_width = fm.horizontalAdvance(album_text)
+            album_rect = QRect(rect.left(), rect.top(), album_width, rect.height())
+            if album_rect.contains(pos):
+                return True
+
+        elif col == COL_GENRE:
+            genre_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+            if genre_text and genre_text != "—":
+                genres = [g.strip() for g in genre_text.split(",") if g.strip()]
+                x_offset = rect.left()
+                for i, genre in enumerate(genres):
+                    genre_width = fm.horizontalAdvance(genre)
+                    genre_rect = QRect(x_offset, rect.top(), genre_width, rect.height())
+                    if genre_rect.contains(pos):
+                        return True
+                    x_offset += genre_width
+                    if i < len(genres) - 1:
+                        x_offset += fm.horizontalAdvance(", ")
+                
+        return False
+
+    def get_artist_at_pos(self, index, pos) -> str | None:
+        col = index.column()
+        if col != COL_ARTISTS:
+            return None
+            
+        rect = self.table.visualRect(index).adjusted(6, 0, -6, 0)
+        fm = self.table.fontMetrics()
+        
+        artists_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        artists = [a.strip() for a in artists_text.split(",") if a.strip()]
+        
+        x_offset = rect.left()
+        for i, artist in enumerate(artists):
+            artist_width = fm.horizontalAdvance(artist)
+            artist_rect = QRect(x_offset, rect.top(), artist_width, rect.height())
+            if artist_rect.contains(pos):
+                return artist
+            x_offset += artist_width
+            if i < len(artists) - 1:
+                x_offset += fm.horizontalAdvance(", ")
+                
+        return None
+
+    def get_genre_at_pos(self, index, pos) -> str | None:
+        col = index.column()
+        if col != COL_GENRE:
+            return None
+            
+        rect = self.table.visualRect(index).adjusted(6, 0, -6, 0)
+        fm = self.table.fontMetrics()
+        
+        genre_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        if not genre_text or genre_text == "—":
+            return None
+            
+        genres = [g.strip() for g in genre_text.split(",") if g.strip()]
+        
+        x_offset = rect.left()
+        for i, genre in enumerate(genres):
+            genre_width = fm.horizontalAdvance(genre)
+            genre_rect = QRect(x_offset, rect.top(), genre_width, rect.height())
+            if genre_rect.contains(pos):
+                return genre
+            x_offset += genre_width
+            if i < len(genres) - 1:
+                x_offset += fm.horizontalAdvance(", ")
+                
+        return None
+
+
+class HoverEventFilter(QObject):
+    def __init__(self, table, delegate, view):
+        super().__init__(table)
+        self.table = table
+        self.delegate = delegate
+        self.view = view
+        
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.MouseMove:
+            pos = event.position().toPoint()
+            self.delegate.set_mouse_pos(pos)
+            
+            index = self.table.indexAt(pos)
+            if index.isValid():
+                self.delegate.hovered_row = index.row()
+                col = index.column()
+                if col in (COL_ARTISTS, COL_ALBUM, COL_GENRE):
+                    if self.delegate.is_over_clickable_text(index, pos):
+                        self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                    else:
+                        self.table.setCursor(Qt.CursorShape.ArrowCursor)
+                else:
+                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
+            else:
+                self.delegate.hovered_row = -1
+                self.table.setCursor(Qt.CursorShape.ArrowCursor)
+                
+            self.table.viewport().update()
+                
+        elif event.type() == QEvent.Type.Leave:
+            self.delegate.clear_mouse_pos()
+            self.delegate.hovered_row = -1
+            self.table.viewport().update()
+            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+            
+        elif event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                pos = event.position().toPoint()
+                index = self.table.indexAt(pos)
+                if index.isValid():
+                    col = index.column()
+                    if col == COL_ARTISTS:
+                        clicked_artist = self.delegate.get_artist_at_pos(index, pos)
+                        if clicked_artist:
+                            self.view.artist_requested.emit(clicked_artist)
+                            return True
+                    elif col == COL_ALBUM:
+                        if self.delegate.is_over_clickable_text(index, pos):
+                            track = index.data(Qt.ItemDataRole.UserRole)
+                            if track and track.album_key:
+                                self.view.album_requested.emit(track.album_key)
+                                return True
+                    elif col == COL_GENRE:
+                        clicked_genre = self.delegate.get_genre_at_pos(index, pos)
+                        if clicked_genre:
+                            self.view.genre_requested.emit(clicked_genre)
+                            return True
+                                
+        return super().eventFilter(obj, event)
