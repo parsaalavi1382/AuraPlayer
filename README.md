@@ -4,6 +4,12 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ---
 
+## 📺 Demo
+<img width="720" height="382" alt="AuraPlayer" src="https://github.com/user-attachments/assets/b54e37da-e130-44bf-a5ef-1d80b699a39d" />
+
+
+---
+
 ## ⚠️ Project Status: In Development
 
 AuraPlayer is **currently in progress and is not yet fully completed**. Core playback, library scanning, custom themes, and dynamic page navigation are completely functional. Secondary features like metadata editing, playlist modification, and the slide-out queue/lyrics panel are scheduled for subsequent roadmap steps.
@@ -90,13 +96,16 @@ Install all required third-party libraries (including those for window styling a
 
 ```bash
 pip install -r requirements.txt
+
 ```
 
 ### 4. Run the Application
+
 Start the AuraPlayer application by executing the main script:
 
 ```bash
 python main.py
+
 ```
 
 ---
@@ -107,3 +116,28 @@ python main.py
 2. Click the **⚙ (Settings)** icon in the top-right corner.
 3. Click **Add Folder** and select the bundled `test_music/` folder (which contains 8 tagged test files of different formats) or point it at your real music library.
 4. The progress dialog will show the scanning status. Once completed, your Tracks, Artists, Genres, and Albums tabs will be fully populated!
+
+---
+
+## 🗺️ Roadmap & Tracking
+
+To see what is currently planned or what has been achieved so far, check out our development logs:
+
+* 📋 **[Feature Backlog](FEATURE_BACKLOG.md):** Detailed look at upcoming tasks, including the **Complete Playlist System** (Manual & Smart Playlists) and **Lyrics Display Integration**.
+* 🪵 **[Progress Log](PROGRESS_LOG.md):** Track day-to-day development history, implemented logic, and completed milestones.
+
+---
+
+## 🤝 Contributing
+
+Contributions, feature ideas, and bug reports are highly welcome!
+
+* Feel free to open an **Issue** to discuss features.
+* Submit a **Pull Request** if you'd like to help polish existing code or implement roadmap tasks.
+
+---
+
+## 📄 License
+
+This project is open-source and available under the [MIT License](LICENSE.md).
+

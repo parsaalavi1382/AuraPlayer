@@ -1,11 +1,4 @@
 """
-Step 2 entry point: launches the real PyQt6 main window for the first
-time, showing Tracks/Artists/Albums/Playlists tabs backed by the
-LibraryStore.
-
-Usage:
-    python main.py
-
 On first launch with no folders added yet, every tab will show its
 "no music folder selected" empty state -- that's correct, not a bug.
 Open Settings (⚙ in the top-right) and add the bundled test_music/
