@@ -87,6 +87,10 @@ class GenrePageView(QWidget):
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_row_double_clicked)
 
+        # Context menu handler
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_context_menu)
+
         self.delegate = TrackHoverDelegate(self.table, self)
         self.table.setItemDelegate(self.delegate)
         self.table.setMouseTracking(True)
@@ -122,7 +126,15 @@ class GenrePageView(QWidget):
             if self.animation_timer.isActive():
                 self.animation_timer.stop()
 
+    def apply_theme_colors(self):
+        theme_key = self.store.cache.settings.theme
+        from ui.theme import THEMES, DEFAULT_THEME, apply_theme_vars
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        self.title_label.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
+        self.stats_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary); font-size: 14px;", theme))
+
     def refresh(self) -> None:
+        self.apply_theme_colors()
         all_tracks = self.store.all_tracks()
         
         # Match tracks against genre (handle list structure parsed by comma separators case-insensitively)
@@ -147,6 +159,55 @@ class GenrePageView(QWidget):
                 return
             self.track_double_clicked.emit(track.path)
 
+    def _show_context_menu(self, pos) -> None:
+        index = self.table.indexAt(pos)
+        if not index.isValid():
+            return
+        track = self.model.track_at(index.row())
+        if not track:
+            return
+
+        from PyQt6.QtWidgets import QMenu, QMessageBox
+        from PyQt6.QtGui import QAction
+
+        menu = QMenu(self)
+        edit_action = QAction("Edit Metadata", self)
+        remove_action = QAction("Remove Song", self)
+        add_playlist_action = QAction("Add to Playlist", self)
+        menu.addAction(edit_action)
+        menu.addAction(remove_action)
+        menu.addAction(add_playlist_action)
+
+        edit_action.triggered.connect(lambda: self._on_edit_metadata(track))
+        remove_action.triggered.connect(lambda: self._on_remove_song(track))
+        add_playlist_action.triggered.connect(lambda: self._on_add_to_playlist(track))
+
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _on_edit_metadata(self, track) -> None:
+        from ui.widgets.metadata_editor_dialog import MetadataEditorDialog
+        dialog = MetadataEditorDialog(track, self.store, self)
+        dialog.exec()
+
+    def _on_remove_song(self, track) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Remove song?",
+            f'Remove "{track.title}" from your library?\n\n'
+            "This only removes it from the library -- the file itself is not deleted.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.store.remove_track(track.path)
+
+    def _on_add_to_playlist(self, track) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self, "Coming in Step 7",
+            "Playlists are built in Step 7. This menu item will let you add this "
+            "track to one once playlists exist."
+        )
+
     def _on_header_clicked(self, index: int) -> None:
         self.model.sort_alphabetical(index)
 
@@ -159,3 +220,23 @@ class GenrePageView(QWidget):
             return
         paths = [t.path for t in ordered_tracks]
         self.play_all_requested.emit(paths, shuffle)
+
+    def refresh_from_signal(self, *args) -> None:
+        try:
+            self.refresh()
+        except RuntimeError:
+            pass
+
+    def disconnect_signals(self) -> None:
+        try:
+            self.store.tracks_added.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.store.track_removed.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.store.track_updated.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass

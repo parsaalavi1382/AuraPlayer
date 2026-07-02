@@ -39,11 +39,16 @@ AuraPlayer is **currently in progress and is not yet fully completed**. Core pla
 
 ### 4. Smart Library Scanner & Secure Storage
 * **Background Scanning:** Scans your selected music folders on a background worker with an elegant progress screen, meaning your app stays fast and responsive with absolutely no freezing.
+* **Automatic Folder Synchronization:** Like a mini version-control system for your music, the app automatically checks your folders for new, deleted, or updated songs every 30 seconds and on startup. It keeps your library perfectly in sync with no manual effort.
+* **Smart Missing-Folder Prompts:** If a whole music folder goes missing (like an unplugged external drive), AuraPlayer gracefully alerts you, giving you the choice to safely remove those tracks or keep them and retry sync once the folder is connected.
 * **Secure Storage Protection:** Automatically saves your library state safely, making sure a sudden computer shutdown or app crash never corrupts or loses your music collection.
 * **Smart Duplication Prevention:** Automatically avoids duplicates when you rescan folders.
 * **Missing File Safeguards:** If you delete or move a file outside the app, its row turns red in the Tracks list. Clicking it shows a helpful warning rather than crashing.
 
-### 5. Personalization & Settings
+### 5. Personalization, Metadata Editing & Settings
+* **Instant Song Tag Editor:** Right-click any track in the list and select "Edit Metadata" to open the advanced tag editor. Update song titles, albums, release years, and custom album cover images directly.
+* **Tag Chip Input Field:** Supports multi-valued tags like multiple artists, album artists, and genres with stylish, interactive chip blocks. Typing a comma (`,`) or pressing Enter instantly splits and converts your text into a new chip. Each chip features an "✕" button to easily delete tags.
+* **Unsaved Changes Safeguard:** To prevent losing your hard work, closing the editor with unsaved changes prompts a gentle warning, allowing you to go back and save.
 * **Real-Time Themes:** Features immediate, single-click theme switching in Settings: **Dark (default)**, **Light**, **Midnight Blue**, and **Warm Amber**. The entire design updates instantly without needing to restart.
 * **Custom Separation Manager:** In the settings screen, you can easily add, edit, or toggle the specific words or symbols (like commas or 'feat.') that AuraPlayer uses to split multiple artists, giving you ultimate control over how your library is organized.
 * **Remembers Window Preferences:** AuraPlayer automatically remembers your window size, position, and layout preferences across restarts, so it always reopens exactly how you left it.

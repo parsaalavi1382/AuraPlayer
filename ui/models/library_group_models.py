@@ -33,6 +33,19 @@ class AlbumGroup:
         return sum(t.duration for t in self.tracks)
 
     @property
+    def genres(self) -> list[str]:
+        seen = set()
+        res = []
+        for t in self.tracks:
+            if t.genre:
+                for g in t.genre.split(","):
+                    g_strip = g.strip()
+                    if g_strip and g_strip.lower() not in seen:
+                        seen.add(g_strip.lower())
+                        res.append(g_strip)
+        return res
+
+    @property
     def has_art(self) -> bool:
         return any(t.has_embedded_art for t in self.tracks)
 

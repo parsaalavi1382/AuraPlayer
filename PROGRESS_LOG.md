@@ -11,7 +11,7 @@
 | Step 3 | ✅ Done | 2026-06-29 |
 | Step 4 | ✅ Done | 2026-06-30 |
 | Step 5 | ✅ Done | 2026-07-01 |
-| Step 6 | 🔜 Planned | - |
+| Step 6 | ✅ Done | 2026-07-02 |
 | Step 7 | 🔜 Planned | - |
 | Step 8 | 🔜 Planned | - |
 | Step 9 | 🔜 Planned | - |
@@ -199,13 +199,19 @@
 - **Tab Closability:** Dynamic page tabs are closable (via an elegant "X" close button), while permanent core tabs (Tracks, Artists, Genres, Albums, Playlists) are locked and cannot be closed.
 - **Auto-Refresh Integration:** Connected all dynamic page views to the `LibraryStore` metadata signals (`tracks_added`, `track_removed`, `track_updated`) to ensure page content live-updates if files are added, modified, or removed.
 
-### 🔜 Step 6: Metadata Editing
-**Status:** Planned
+### ✅ Step 6: Metadata Editing
+**Status:** Done
+**Date:** 2026-07-02
 **Deliverables:**
-- [Placeholder — Edit Metadata dialog writing changes back to the
-  actual audio file via mutagen, with live cache + UI refresh across
-  all views; includes a Genres field alongside Artists, using the same
-  separator-based multi-value entry — see `FEATURE_BACKLOG.md` item #22]
+- **Robust Tag Writer Engine:** Created `core/metadata_writer.py` to write metadata changes back to original audio files across all 5 supported formats (MP3/FLAC/M4A/WAV/OGG) utilizing `mutagen` safely and robustly.
+- **Modern Tag Chip/Tagging Widget:** Implemented a customizable `TagInputField` that renders beautiful tag chip boxes with a light surface background and "✕" close buttons. Features instant, real-time split-on-comma (`,`), split-on-enter, and split-on-focus-out behaviors.
+- **Fully-Featured Metadata Editor Dialog:** Implemented a modern `MetadataEditorDialog` UI displaying:
+  - Interactive **Album Cover Image** uploader (allows browsing and selecting a `.png`/`.jpg`/`.jpeg` file).
+  - Text input for **Track Name** and **Album Name**.
+  - Advanced chip editors for **Artist(s)**, **Album Artist(s)**, and **Genre(s)**.
+  - Release year field and formatted **Disc & Track Numbers** accompanied by the **Disc SVG** icon and **"#" (hashtag)** icon.
+- **Unsaved Changes Confirmation Safeguard:** Configured dialog `closeEvent` and button handlers to check if any field has been modified. Displays an intuitive "Are you sure? Changes will be lost" confirmation popup when closing with unsaved edits, and closes directly when clean.
+- **Instant Live App-Wide Refresh:** Connected the Save action directly to the single source of truth `LibraryStore.update_track()`. Updates propagate instantly and seamlessly across all visible tables, stats, and dynamic pages (such as Album/Artist/Genre page views) with zero app freezes or restarts.
 
 ### 🔜 Step 7: Playlists
 **Status:** Planned

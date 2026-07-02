@@ -15,6 +15,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSplitter,
     QTableView, QHeaderView, QAbstractItemView, QStyledItemDelegate, QStyle, QStyleOptionViewItem,
+    QScrollArea, QSizePolicy
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen, QPixmap
 
@@ -26,8 +27,9 @@ from ui.theme import THEMES, DEFAULT_THEME
 COL_TRACK_NO = 0
 COL_TITLE = 1
 COL_ARTISTS = 2
-COL_DURATION = 3
-COLUMN_HEADERS = ["#", "Title", "Artist(s)", "Duration"]
+COL_GENRE = 3
+COL_DURATION = 4
+COLUMN_HEADERS = ["#", "Title", "Artist(s)", "Genre", "Duration"]
 
 
 def format_duration(seconds: float) -> str:
@@ -71,6 +73,8 @@ class AlbumTracksTableModel(QAbstractTableModel):
                 return track.title
             if col == COL_ARTISTS:
                 return ", ".join(track.artists)
+            if col == COL_GENRE:
+                return track.genre or "—"
             if col == COL_DURATION:
                 return format_duration(track.duration)
 
@@ -221,7 +225,7 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
                 painter.setFont(font)
 
                 if option.state & QStyle.StateFlag.State_Selected:
-                    painter.setPen(option.palette.highlightedText().color())
+                    painter.setPen(QColor(theme['text_primary']))
                 else:
                     painter.setPen(QColor(theme['accent'] if artist_hovered else theme['text_secondary']))
 
@@ -323,24 +327,44 @@ class AlbumPageView(QWidget):
 
     def __init__(self, album_key: str, store: LibraryStore, engine=None, parent=None):
         super().__init__(parent)
+        self.main_window = parent
         self.album_key = album_key
         self.store = store
         self.engine = engine
         self.album_tracks: list[Track] = []
+        self._tables = []
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(24, 24, 24, 16)
-        self.main_layout.setSpacing(24)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+
+        # Main scroll area wrapping the whole page
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll.setObjectName("albumScrollArea")
+        self.scroll.setStyleSheet("#albumScrollArea { background: transparent; border: none; }")
+        self.main_layout.addWidget(self.scroll)
+
+        # Scroll content widget
+        self.scroll_content = QWidget()
+        self.scroll_content.setObjectName("albumScrollContent")
+        self.scroll_content.setStyleSheet("#albumScrollContent { background: transparent; }")
+        self.scroll_layout = QVBoxLayout(self.scroll_content)
+        self.scroll_layout.setContentsMargins(24, 24, 24, 24)
+        self.scroll_layout.setSpacing(24)
+        self.scroll.setWidget(self.scroll_content)
 
         # We will dynamically populate this layout on refresh()
         self.header_widget = QWidget()
-        self.main_layout.addWidget(self.header_widget)
+        self.scroll_layout.addWidget(self.header_widget)
 
         self.tables_container = QWidget()
         self.tables_layout = QVBoxLayout(self.tables_container)
         self.tables_layout.setContentsMargins(0, 0, 0, 0)
         self.tables_layout.setSpacing(16)
-        self.main_layout.addWidget(self.tables_container, stretch=1)
+        self.scroll_layout.addWidget(self.tables_container)
 
         self.animation_timer = QTimer(self)
         self.animation_timer.setInterval(120)
@@ -352,6 +376,28 @@ class AlbumPageView(QWidget):
 
         self.refresh()
         self._update_animation_timer()
+
+    def resize_tables_to_contents(self) -> None:
+        for table in self._tables:
+            model = table.model()
+            if not model:
+                continue
+            num_rows = model.rowCount()
+            row_height = table.verticalHeader().defaultSectionSize() or 36
+            header_height = table.horizontalHeader().height() or 28
+            if num_rows == 0:
+                table.setFixedHeight(0)
+            else:
+                total_height = num_rows * row_height + header_height + 4
+                table.setFixedHeight(total_height)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self.resize_tables_to_contents)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self.resize_tables_to_contents)
 
     def _on_playback_changed(self, *args) -> None:
         self._update_animation_timer()
@@ -374,12 +420,29 @@ class AlbumPageView(QWidget):
                 self.animation_timer.stop()
 
     def refresh(self) -> None:
-        # Clear existing tables/headers
-        while self.tables_layout.count():
-            item = self.tables_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
+        self._tables = []
+
+        # Delete and recreate header_widget to prevent overlapping layouts
+        if hasattr(self, "header_widget") and self.header_widget is not None:
+            self.scroll_layout.removeWidget(self.header_widget)
+            self.header_widget.deleteLater()
+            self.header_widget = None
+
+        self.header_widget = QWidget()
+        self.header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.scroll_layout.insertWidget(0, self.header_widget)
+
+        # Delete and recreate tables_container to prevent overlapping layouts
+        if hasattr(self, "tables_container") and self.tables_container is not None:
+            self.scroll_layout.removeWidget(self.tables_container)
+            self.tables_container.deleteLater()
+            self.tables_container = None
+
+        self.tables_container = QWidget()
+        self.tables_layout = QVBoxLayout(self.tables_container)
+        self.tables_layout.setContentsMargins(0, 0, 0, 0)
+        self.tables_layout.setSpacing(16)
+        self.scroll_layout.addWidget(self.tables_container)
 
         all_tracks = self.store.all_tracks()
         album_tracks = [t for t in all_tracks if t.album_key == self.album_key]
@@ -403,16 +466,21 @@ class AlbumPageView(QWidget):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(24)
 
+        # Resolve active theme
+        theme_key = self.store.cache.settings.theme
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        from ui.theme import apply_theme_vars
+
         # Large Album Art on the Left
         self.art_label = QLabel()
-        self.art_label.setFixedSize(140, 140)
-        self.art_label.setStyleSheet("border-radius: 8px; background-color: var(--surface);")
+        self.art_label.setFixedSize(160, 160)
+        self.art_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface);", theme))
         
         # Load art
         art_pixmap = get_album_art(first_track.path)
         if art_pixmap and not art_pixmap.isNull():
             scaled = art_pixmap.scaled(
-                140, 140,
+                160, 160,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
@@ -430,7 +498,7 @@ class AlbumPageView(QWidget):
         
         self.title_label = QLabel(album_title)
         self.title_label.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
-        self.title_label.setStyleSheet("color: var(--text_primary);")
+        self.title_label.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
         info_layout.addWidget(self.title_label)
 
         # Artists row (underlined clickable)
@@ -439,14 +507,14 @@ class AlbumPageView(QWidget):
         artist_row.setContentsMargins(0, 0, 0, 0)
         
         artists_label = QLabel("by")
-        artists_label.setStyleSheet("color: var(--text_secondary);")
+        artists_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
         artist_row.addWidget(artists_label)
 
         for i, art_name in enumerate(album_artists):
             btn = QPushButton(art_name)
             btn.setFlat(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet("""
+            btn.setStyleSheet(apply_theme_vars("""
                 QPushButton {
                     color: var(--accent);
                     border: none;
@@ -458,25 +526,27 @@ class AlbumPageView(QWidget):
                 QPushButton:hover {
                     text-decoration: underline;
                 }
-            """)
+            """, theme))
             btn.clicked.connect(lambda checked, name=art_name: self.artist_requested.emit(name))
             artist_row.addWidget(btn)
             
             if i < len(album_artists) - 1:
                 comma = QLabel(", ")
-                comma.setStyleSheet("color: var(--text_secondary);")
+                comma.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
                 artist_row.addWidget(comma)
         artist_row.addStretch()
         info_layout.addLayout(artist_row)
 
         # Year and Stats
-        stats_text = f"{year}  •  {len(album_tracks)} Tracks  •  Total: {format_duration(total_duration)}"
+        display_year = year[:4] if (year and len(year) >= 4 and year[:4].isdigit()) else year
+        tracks_word = "Track" if len(album_tracks) == 1 else "Tracks"
+        stats_text = f"{display_year} • {len(album_tracks)} {tracks_word} • Total: {format_duration(total_duration)}"
         self.stats_lbl = QLabel(stats_text)
-        self.stats_lbl.setStyleSheet("color: var(--text_secondary); font-size: 13px;")
+        self.stats_lbl.setStyleSheet(apply_theme_vars("color: var(--text_secondary); font-size: 13px;", theme))
         info_layout.addWidget(self.stats_lbl)
         info_layout.addStretch()
 
-        # Play / Shuffle buttons
+        # Play / Shuffle / Edit Album buttons
         btn_layout = QHBoxLayout()
         play_btn = QPushButton("▶  Play Album")
         play_btn.setObjectName("accentButton")
@@ -485,8 +555,12 @@ class AlbumPageView(QWidget):
         shuf_btn = QPushButton("🔀  Shuffle")
         shuf_btn.clicked.connect(lambda: self._play_album_tracks(album_tracks, shuffle=True))
 
+        edit_album_btn = QPushButton("✏  Edit Album")
+        edit_album_btn.clicked.connect(self._open_album_editor)
+
         btn_layout.addWidget(play_btn)
         btn_layout.addWidget(shuf_btn)
+        btn_layout.addWidget(edit_album_btn)
         btn_layout.addStretch()
         info_layout.addLayout(btn_layout)
 
@@ -500,14 +574,31 @@ class AlbumPageView(QWidget):
             discs.setdefault(t.disc_number, []).append(t)
 
         sorted_discs = sorted(discs.items())
-        show_disc_headers = len(sorted_discs) > 1
+        show_disc_headers = True
 
         for disc_no, tracks in sorted_discs:
             if show_disc_headers:
-                disc_title = QLabel(f"Disc {disc_no}" if disc_no > 0 else "Disc 1")
+                header_container = QWidget()
+                header_h_layout = QHBoxLayout(header_container)
+                header_h_layout.setContentsMargins(0, 12, 0, 4)
+                header_h_layout.setSpacing(8)
+
+                theme_key = self.store.cache.settings.theme
+                theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+
+                from ui.svg_icon import svg_pixmap
+                disc_icon_lbl = QLabel()
+                disc_icon_lbl.setPixmap(svg_pixmap("disc", theme["text_primary"], 16))
+
+                disc_title = QLabel(f"Disc {disc_no}")
                 disc_title.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-                disc_title.setStyleSheet("color: var(--text_primary); margin-top: 8px;")
-                self.tables_layout.addWidget(disc_title)
+                disc_title.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
+
+                header_h_layout.addWidget(disc_icon_lbl)
+                header_h_layout.addWidget(disc_title)
+                header_h_layout.addStretch()
+
+                self.tables_layout.addWidget(header_container)
 
             table = QTableView()
             model = AlbumTracksTableModel(tracks, self)
@@ -522,6 +613,7 @@ class AlbumPageView(QWidget):
             table.horizontalHeader().setSectionResizeMode(COL_TRACK_NO, QHeaderView.ResizeMode.ResizeToContents)
             table.horizontalHeader().setSectionResizeMode(COL_TITLE, QHeaderView.ResizeMode.Stretch)
             table.horizontalHeader().setSectionResizeMode(COL_ARTISTS, QHeaderView.ResizeMode.Stretch)
+            table.horizontalHeader().setSectionResizeMode(COL_GENRE, QHeaderView.ResizeMode.Stretch)
             table.horizontalHeader().setSectionResizeMode(COL_DURATION, QHeaderView.ResizeMode.ResizeToContents)
 
             delegate = AlbumTrackHoverDelegate(table, self)
@@ -533,11 +625,72 @@ class AlbumPageView(QWidget):
             # Double-click handler
             table.doubleClicked.connect(lambda index, m=model: self._on_row_double_clicked(index, m))
 
-            self.tables_layout.addWidget(table, stretch=1 if not show_disc_headers else 0)
+            # Context menu handler
+            table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            table.customContextMenuRequested.connect(lambda pos, t=table, m=model: self._show_context_menu(pos, t, m))
 
-        # Add a stretch spacer at bottom of tables container if multi-disc to prevent huge empty tables stretching
-        if show_disc_headers:
-            self.tables_layout.addStretch(1)
+            # Turn off native scrollbars to allow full-page scrolling
+            table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+            self.tables_layout.addWidget(table, stretch=0)
+            self._tables.append(table)
+
+        # Add a stretch spacer at bottom of tables container
+        self.tables_layout.addStretch(1)
+
+        # Trigger table height recalculation
+        QTimer.singleShot(0, self.resize_tables_to_contents)
+
+    def _show_context_menu(self, pos, table, model) -> None:
+        index = table.indexAt(pos)
+        if not index.isValid():
+            return
+        track = model.track_at(index.row())
+        if not track:
+            return
+
+        from PyQt6.QtWidgets import QMenu, QMessageBox
+        from PyQt6.QtGui import QAction
+
+        menu = QMenu(self)
+        edit_action = QAction("Edit Metadata", self)
+        remove_action = QAction("Remove Song", self)
+        add_playlist_action = QAction("Add to Playlist", self)
+        menu.addAction(edit_action)
+        menu.addAction(remove_action)
+        menu.addAction(add_playlist_action)
+
+        edit_action.triggered.connect(lambda: self._on_edit_metadata(track))
+        remove_action.triggered.connect(lambda: self._on_remove_song(track))
+        add_playlist_action.triggered.connect(lambda: self._on_add_to_playlist(track))
+
+        menu.exec(table.viewport().mapToGlobal(pos))
+
+    def _on_edit_metadata(self, track) -> None:
+        from ui.widgets.metadata_editor_dialog import MetadataEditorDialog
+        dialog = MetadataEditorDialog(track, self.store, self)
+        dialog.exec()
+
+    def _on_remove_song(self, track) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Remove song?",
+            f'Remove "{track.title}" from your library?\n\n'
+            "This only removes it from the library -- the file itself is not deleted.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.store.remove_track(track.path)
+
+    def _on_add_to_playlist(self, track) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self, "Coming in Step 7",
+            "Playlists are built in Step 7. This menu item will let you add this "
+            "track to one once playlists exist."
+        )
 
     def _on_row_double_clicked(self, index, model) -> None:
         track = model.track_at(index.row())
@@ -550,3 +703,49 @@ class AlbumPageView(QWidget):
         valid_paths = [t.path for t in tracks if not t.file_missing]
         if valid_paths:
             self.play_all_requested.emit(valid_paths, shuffle)
+
+    def refresh_from_signal(self, *args) -> None:
+        try:
+            self.refresh()
+        except RuntimeError:
+            pass
+
+    def _open_album_editor(self) -> None:
+        from ui.widgets.album_editor_dialog import AlbumEditorDialog
+        if not self.album_tracks:
+            return
+        dlg = AlbumEditorDialog(self.album_tracks, self.store, self)
+        if dlg.exec():
+            # Since the dialog updated all tracks in self.album_tracks in-place,
+            # we can read the new values directly.
+            first_track = self.album_tracks[0]
+            new_album = first_track.album
+            new_album_artists = first_track.album_artists
+            primary_artist = (new_album_artists or ["Unknown Artist"])[0]
+            new_key = f"{new_album}::{primary_artist}"
+
+            # Update main window tab if needed
+            if hasattr(self, "main_window") and self.main_window and hasattr(self.main_window, "tabs"):
+                tabs = self.main_window.tabs
+                idx = tabs.indexOf(self)
+                if idx != -1:
+                    new_tab_title = f"{new_album} | Album"
+                    tabs.setTabText(idx, new_tab_title)
+
+            # Update local album key
+            self.album_key = new_key
+            self.refresh()
+
+    def disconnect_signals(self) -> None:
+        try:
+            self.store.tracks_added.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.store.track_removed.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.store.track_updated.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass

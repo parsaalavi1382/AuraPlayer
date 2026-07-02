@@ -28,6 +28,28 @@ class AlbumCard(QWidget):
         self.album_key = album_key
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         
+        # Resolve active theme
+        store = None
+        p = self.parent()
+        while p:
+            if hasattr(p, "store"):
+                store = p.store
+                break
+            p = p.parent()
+        
+        theme_key = "dark"
+        if store:
+            theme_key = store.cache.settings.theme
+        else:
+            from PyQt6.QtWidgets import QApplication
+            for w in QApplication.topLevelWidgets():
+                if hasattr(w, "store"):
+                    theme_key = w.store.cache.settings.theme
+                    break
+        
+        from ui.theme import THEMES, apply_theme_vars, DEFAULT_THEME
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+
         # Outer layout
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -36,15 +58,15 @@ class AlbumCard(QWidget):
         # Inner Frame
         self.frame = QFrame()
         self.frame.setObjectName("albumCardFrame")
-        self.frame.setStyleSheet("""
+        self.frame.setStyleSheet(apply_theme_vars("""
             #albumCardFrame {
                 border-radius: 8px;
                 background-color: transparent;
             }
             #albumCardFrame:hover {
-                background-color: rgba(255, 255, 255, 0.08);
+                background-color: var(--surface_hover);
             }
-        """)
+        """, theme))
         
         layout = QVBoxLayout(self.frame)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -53,7 +75,7 @@ class AlbumCard(QWidget):
         # Cover Art (Bigger: 150x150)
         self.cover_label = QLabel()
         self.cover_label.setFixedSize(150, 150)
-        self.cover_label.setStyleSheet("border-radius: 8px; background-color: var(--surface);")
+        self.cover_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface);", theme))
         
         pixmap = get_album_art(track_path)
         if pixmap and not pixmap.isNull():
@@ -67,7 +89,7 @@ class AlbumCard(QWidget):
             self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.cover_label.setFont(QFont("Segoe UI", 32))
             self.cover_label.setText("💿")
-            self.cover_label.setStyleSheet("border-radius: 8px; background-color: var(--surface); color: var(--text_secondary);")
+            self.cover_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface); color: var(--text_secondary);", theme))
             
         layout.addWidget(self.cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
         
@@ -78,14 +100,14 @@ class AlbumCard(QWidget):
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.name_label.setText(album_name)
         self.name_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        self.name_label.setStyleSheet("color: var(--text_primary);")
+        self.name_label.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
         layout.addWidget(self.name_label)
         
         # Shows featured artist if it's "Appears on"
         if is_appears_on:
             self.sec_label = QLabel(main_artist)
             self.sec_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Normal))
-            self.sec_label.setStyleSheet("color: var(--text_secondary);")
+            self.sec_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
             self.sec_label.setWordWrap(True)
             self.sec_label.setFixedWidth(150)
             self.sec_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -243,10 +265,10 @@ class ArtistPageView(QWidget):
         albums_layout.setContentsMargins(0, 0, 0, 0)
         albums_layout.setSpacing(12)
         
-        albums_title = QLabel("Albums")
-        albums_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        albums_title.setStyleSheet("color: var(--text_primary);")
-        albums_layout.addWidget(albums_title)
+        self.albums_title = QLabel("Albums")
+        self.albums_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.albums_title.setStyleSheet("color: var(--text_primary);")
+        albums_layout.addWidget(self.albums_title)
         
         self.albums_grid = AlbumGridWidget()
         self.albums_grid.album_clicked.connect(self.album_requested.emit)
@@ -261,10 +283,10 @@ class ArtistPageView(QWidget):
         appears_layout.setContentsMargins(0, 0, 0, 0)
         appears_layout.setSpacing(12)
         
-        appears_on_title = QLabel("Appears on")
-        appears_on_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        appears_on_title.setStyleSheet("color: var(--text_primary);")
-        appears_layout.addWidget(appears_on_title)
+        self.appears_on_title = QLabel("Appears on")
+        self.appears_on_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.appears_on_title.setStyleSheet("color: var(--text_primary);")
+        appears_layout.addWidget(self.appears_on_title)
         
         self.appears_on_grid = AlbumGridWidget()
         self.appears_on_grid.album_clicked.connect(self.album_requested.emit)
@@ -279,10 +301,10 @@ class ArtistPageView(QWidget):
         tracks_layout.setContentsMargins(0, 0, 0, 0)
         tracks_layout.setSpacing(12)
 
-        tracks_title = QLabel("Tracks")
-        tracks_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        tracks_title.setStyleSheet("color: var(--text_primary);")
-        tracks_layout.addWidget(tracks_title)
+        self.tracks_title = QLabel("Tracks")
+        self.tracks_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.tracks_title.setStyleSheet("color: var(--text_primary);")
+        tracks_layout.addWidget(self.tracks_title)
 
         self.table = QTableView()
         self.model = TracksTableModel(self)
@@ -300,6 +322,10 @@ class ArtistPageView(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(COL_DURATION, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_row_double_clicked)
+
+        # Context menu handler
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_context_menu)
 
         # Disable table scrollbars so the entire page scrolls together
         self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -375,7 +401,19 @@ class ArtistPageView(QWidget):
         total_height = num_rows * row_height + header_height + 4
         self.table.setFixedHeight(total_height)
 
+    def apply_theme_colors(self):
+        theme_key = self.store.cache.settings.theme
+        from ui.theme import THEMES, DEFAULT_THEME, apply_theme_vars
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        
+        self.title_label.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
+        self.stats_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
+        self.albums_title.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
+        self.appears_on_title.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
+        self.tracks_title.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
+
     def refresh(self) -> None:
+        self.apply_theme_colors()
         all_tracks = self.store.all_tracks()
         
         # Filter tracks where this artist is listed in artists
@@ -427,6 +465,55 @@ class ArtistPageView(QWidget):
                 return
             self.track_double_clicked.emit(track.path)
 
+    def _show_context_menu(self, pos) -> None:
+        index = self.table.indexAt(pos)
+        if not index.isValid():
+            return
+        track = self.model.track_at(index.row())
+        if not track:
+            return
+
+        from PyQt6.QtWidgets import QMenu, QMessageBox
+        from PyQt6.QtGui import QAction
+
+        menu = QMenu(self)
+        edit_action = QAction("Edit Metadata", self)
+        remove_action = QAction("Remove Song", self)
+        add_playlist_action = QAction("Add to Playlist", self)
+        menu.addAction(edit_action)
+        menu.addAction(remove_action)
+        menu.addAction(add_playlist_action)
+
+        edit_action.triggered.connect(lambda: self._on_edit_metadata(track))
+        remove_action.triggered.connect(lambda: self._on_remove_song(track))
+        add_playlist_action.triggered.connect(lambda: self._on_add_to_playlist(track))
+
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _on_edit_metadata(self, track) -> None:
+        from ui.widgets.metadata_editor_dialog import MetadataEditorDialog
+        dialog = MetadataEditorDialog(track, self.store, self)
+        dialog.exec()
+
+    def _on_remove_song(self, track) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Remove song?",
+            f'Remove "{track.title}" from your library?\n\n'
+            "This only removes it from the library -- the file itself is not deleted.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.store.remove_track(track.path)
+
+    def _on_add_to_playlist(self, track) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self, "Coming in Step 7",
+            "Playlists are built in Step 7. This menu item will let you add this "
+            "track to one once playlists exist."
+        )
+
     def _play_artist_tracks(self, shuffle: bool) -> None:
         ordered_tracks = [
             self.model.track_at(row) for row in range(self.model.rowCount())
@@ -436,3 +523,23 @@ class ArtistPageView(QWidget):
             return
         paths = [t.path for t in ordered_tracks]
         self.play_all_requested.emit(paths, shuffle)
+
+    def refresh_from_signal(self, *args) -> None:
+        try:
+            self.refresh()
+        except RuntimeError:
+            pass
+
+    def disconnect_signals(self) -> None:
+        try:
+            self.store.tracks_added.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.store.track_removed.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self.store.track_updated.disconnect(self.refresh_from_signal)
+        except (TypeError, RuntimeError):
+            pass

@@ -27,8 +27,9 @@ from ui.theme import THEMES, DEFAULT_THEME
 
 COL_ALBUM_NAME = 0
 COL_ALBUM_ARTISTS = 1
-COL_ALBUM_DURATION = 2
-COL_ALBUM_YEAR = 3
+COL_ALBUM_GENRE = 2
+COL_ALBUM_DURATION = 3
+COL_ALBUM_YEAR = 4
 
 
 class AlbumHoverDelegate(QStyledItemDelegate):
@@ -78,7 +79,7 @@ class AlbumHoverDelegate(QStyledItemDelegate):
         y_baseline = rect.top() + (rect.height() + fm.ascent() - fm.descent()) // 2
 
         if option.state & QStyle.StateFlag.State_Selected:
-            text_color = option.palette.highlightedText().color()
+            text_color = QColor(theme['text_primary'])
         else:
             text_color = QColor(theme['text_primary'])
 
@@ -225,7 +226,7 @@ class AlbumHoverEventFilter(QObject):
 
 
 class _AlbumsTableModel(QAbstractTableModel):
-    COLUMNS = ["Album Name", "Artists", "Duration", "Year"]
+    COLUMNS = ["Album Name", "Artists", "Genre", "Duration", "Year"]
 
     def __init__(self, base_model: AlbumsListModel, parent=None):
         super().__init__(parent)
@@ -256,13 +257,15 @@ class _AlbumsTableModel(QAbstractTableModel):
             return None
         if role == Qt.ItemDataRole.DisplayRole:
             col = index.column()
-            if col == 0:
+            if col == COL_ALBUM_NAME:
                 return album.album_name
-            if col == 1:
+            if col == COL_ALBUM_ARTISTS:
                 return ", ".join(album.album_artists)
-            if col == 2:
+            if col == COL_ALBUM_GENRE:
+                return ", ".join(album.genres) if album.genres else "—"
+            if col == COL_ALBUM_DURATION:
                 return format_duration(album.total_duration)
-            if col == 3:
+            if col == COL_ALBUM_YEAR:
                 return album.year or "—"
         if role == Qt.ItemDataRole.UserRole:
             return album
@@ -299,10 +302,11 @@ class AlbumsView(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setShowGrid(False)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_NAME, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_ARTISTS, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_GENRE, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_DURATION, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_YEAR, QHeaderView.ResizeMode.ResizeToContents)
         self.table.doubleClicked.connect(self._on_double_clicked)
 
         self.delegate = AlbumHoverDelegate(self.table, self)

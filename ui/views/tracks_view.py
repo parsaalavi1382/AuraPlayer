@@ -224,11 +224,9 @@ class TracksView(QWidget):
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _on_edit_metadata(self, track) -> None:
-        QMessageBox.information(
-            self, "Coming in Step 6",
-            "Metadata editing (writing changes back to the file) is built in Step 6, "
-            "right after the Player Screen and navigation are in place."
-        )
+        from ui.widgets.metadata_editor_dialog import MetadataEditorDialog
+        dialog = MetadataEditorDialog(track, self.store, self)
+        dialog.exec()
 
     def _on_remove_song(self, track) -> None:
         reply = QMessageBox.question(
@@ -395,9 +393,9 @@ class TrackHoverDelegate(QStyledItemDelegate):
             text_rect = option.rect.adjusted(cover_size + 18, 0, -6, 0)
             
             if option.state & QStyle.StateFlag.State_Selected:
-                title_color = option.palette.highlightedText().color()
+                title_color = QColor(theme['text_primary'])
             else:
-                title_color = option.palette.text().color()
+                title_color = QColor(theme['text_primary'])
                 fg = index.data(Qt.ItemDataRole.ForegroundRole)
                 if fg:
                     title_color = fg.color()
@@ -441,9 +439,9 @@ class TrackHoverDelegate(QStyledItemDelegate):
         
         # Determine text color based on selection state
         if option.state & QStyle.StateFlag.State_Selected:
-            text_color = option.palette.highlightedText().color()
+            text_color = QColor(theme['text_primary'])
         else:
-            text_color = option.palette.text().color()
+            text_color = QColor(theme['text_secondary'] if index.column() != 1 else theme['text_primary'])
             # If there's an explicit foreground role:
             fg = index.data(Qt.ItemDataRole.ForegroundRole)
             if fg:

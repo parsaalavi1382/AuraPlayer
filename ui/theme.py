@@ -88,6 +88,15 @@ DEFAULT_THEME = "dark"
 FONT_FAMILY = "Segoe UI, -apple-system, sans-serif"
 
 
+def apply_theme_vars(stylesheet: str, theme: dict[str, str]) -> str:
+    import re
+    def replace_var(match):
+        var_name = match.group(1)
+        var_name_clean = var_name.replace("-", "_")
+        return theme.get(var_name_clean, match.group(0))
+    return re.sub(r"var\(--([\w-]+)\)", replace_var, stylesheet)
+
+
 def theme_choices() -> list[tuple[str, str]]:
     order = ["dark", "light", "midnight_blue", "warm_amber"]
     return [(key, THEMES[key]["label"]) for key in order if key in THEMES]

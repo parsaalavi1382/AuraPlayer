@@ -30,7 +30,8 @@ from ui.widgets.top_bar import TopBar
 from ui.widgets.bottom_bar import BottomBar
 from ui.widgets.settings_dialog import SettingsDialog
 from ui.widgets.scan_progress_dialog import ScanProgressDialog
-from ui.scan_worker import ScanWorker
+from core.sync_manager import SyncManager
+from ui.sync_worker import SyncWorker
 from ui.views.tracks_view import TracksView
 from ui.views.artists_view import ArtistsView
 from ui.views.genres_view import GenresView
@@ -195,8 +196,23 @@ class MainWindow(QMainWindow):
             self._load_and_push_art(restored_track.path)
             self.player_screen.set_playing(self.engine.is_playing())
 
-        self._scan_worker: ScanWorker | None = None
+        self._sync_worker: SyncWorker | None = None
         self._progress_dialog: ScanProgressDialog | None = None
+
+        # --- Sync setup ---
+        import os
+        from PyQt6.QtCore import QTimer
+        cache_dir = os.path.dirname(self.store.cache.cache_path)
+        self.sync_manager = SyncManager(self.store, cache_dir)
+
+        # Setup background auto-sync timer (every 30 seconds)
+        self.sync_timer = QTimer(self)
+        self.sync_timer.setInterval(30000)  # 30 seconds
+        self.sync_timer.timeout.connect(self._run_background_sync)
+        self.sync_timer.start()
+
+        # Trigger startup sync shortly after window loads
+        QTimer.singleShot(100, self._run_startup_sync)
 
     # ------------------------------------------------------------------
     # Theme application
@@ -221,42 +237,125 @@ class MainWindow(QMainWindow):
         # Tracks table danger color
         self.tracks_view.model.set_danger_color(theme["danger"])
 
+        # Refresh all permanent views and dynamic tab views to pick up new colors
+        for i in range(self.tabs.count()):
+            widget = self.tabs.widget(i)
+            if widget and hasattr(widget, "refresh"):
+                try:
+                    widget.refresh()
+                except Exception:
+                    pass
+        self._refresh_all_views()
+
         if save:
             self.store.cache.settings.theme = theme_key
             self.store.cache.save()
 
     # ------------------------------------------------------------------
-    # Settings & scanning
+    # Settings & scanning / syncing
     # ------------------------------------------------------------------
 
     def _open_settings(self) -> None:
         dialog = SettingsDialog(self.store, self)
-        dialog.folders_added.connect(self._start_scan)
+        dialog.folders_added.connect(lambda f: self._start_sync(f, is_initial=True))
         dialog.folder_removed.connect(lambda _f: self._refresh_all_views())
+        dialog.sync_requested.connect(lambda: self._start_sync(list(self.store.cache.settings.music_folders), is_initial=True))
         dialog.theme_changed.connect(self._apply_theme)
         dialog.exec()
 
-    def _start_scan(self, folders: list[str]) -> None:
-        self._progress_dialog = ScanProgressDialog(self)
-        self._scan_worker = ScanWorker(self.store.cache, folders, self)
-        self._scan_worker.progress.connect(self._progress_dialog.update_progress)
-        self._scan_worker.finished_scan.connect(self._on_scan_finished)
-        self._progress_dialog.show()
-        self._scan_worker.start()
+    def check_missing_folders(self) -> bool:
+        """
+        Checks if any of the configured folders are missing.
+        Prompts the user with Delete/Resync options.
+        Returns True if we can proceed with sync, or False if we should cancel.
+        """
+        import os
+        folders = list(self.store.cache.settings.music_folders)
+        for folder in folders:
+            while not os.path.isdir(folder):
+                # Ensure the folder is still in settings (might have been deleted in previous loop iteration)
+                if folder not in self.store.cache.settings.music_folders:
+                    break
 
-    def _on_scan_finished(self, summary: dict) -> None:
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("Folder is missing")
+                msg_box.setText(
+                    f"The music folder is missing:\n{folder}\n\n"
+                    "It may have been moved, deleted, or is currently unreachable."
+                )
+                delete_btn = msg_box.addButton("Delete (Remove from Library)", QMessageBox.ButtonRole.DestructiveRole)
+                resync_btn = msg_box.addButton("Resync (Try Again)", QMessageBox.ButtonRole.AcceptRole)
+                cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+                
+                msg_box.exec()
+                
+                clicked = msg_box.clickedButton()
+                if clicked == delete_btn:
+                    self.store.remove_folder(folder)
+                    self._refresh_all_views()
+                    break
+                elif clicked == resync_btn:
+                    # Continue the while loop to check path again
+                    continue
+                else:
+                    # Cancel
+                    return False
+        return True
+
+    def _start_sync(self, folders: list[str], is_initial: bool = False) -> None:
+        """
+        Starts a sync operation.
+        If is_initial is True, it locks the app using a modal ScanProgressDialog.
+        Otherwise, it runs silently in the background.
+        """
+        if self._sync_worker is not None and self._sync_worker.isRunning():
+            return
+
+        if not self.check_missing_folders():
+            return
+
+        if is_initial:
+            self._progress_dialog = ScanProgressDialog(self)
+            self._progress_dialog.setModal(True)  # Lock the app!
+            self._progress_dialog.setWindowTitle("Scanning music folders...")
+            self._progress_dialog.show()
+
+        self._sync_worker = SyncWorker(self.sync_manager, folders, self)
+        
+        if is_initial:
+            self._sync_worker.progress.connect(self._progress_dialog.update_progress)
+            self._sync_worker.finished_sync.connect(self._on_initial_sync_finished)
+        else:
+            self._sync_worker.finished_sync.connect(self._on_background_sync_finished)
+            
+        self._sync_worker.start()
+
+    def _on_initial_sync_finished(self, summary: dict) -> None:
         if self._progress_dialog:
             self._progress_dialog.close()
             self._progress_dialog = None
         self._refresh_all_views()
         msg = (
             f"Scan complete.\n\n"
-            f"New tracks: {summary['added']}\n"
-            f"Already in library: {summary['skipped']}"
+            f"Added tracks: {summary['added']}\n"
+            f"Deleted tracks: {summary['deleted']}\n"
+            f"Updated tracks: {summary['edited']}"
         )
-        if summary.get("missing"):
-            msg += f"\nMissing files flagged: {len(summary['missing'])}"
         QMessageBox.information(self, "Scan complete", msg)
+
+    def _on_background_sync_finished(self, summary: dict) -> None:
+        if summary["added"] > 0 or summary["deleted"] > 0 or summary["edited"] > 0:
+            self._refresh_all_views()
+
+    def _run_startup_sync(self) -> None:
+        folders = list(self.store.cache.settings.music_folders)
+        if folders:
+            self._start_sync(folders, is_initial=False)
+
+    def _run_background_sync(self) -> None:
+        folders = list(self.store.cache.settings.music_folders)
+        if folders:
+            self._start_sync(folders, is_initial=False)
 
     def _refresh_all_views(self) -> None:
         self.tracks_view.refresh()
@@ -394,6 +493,11 @@ class MainWindow(QMainWindow):
             widget = self.tabs.widget(index)
             self.tabs.removeTab(index)
             if widget:
+                if hasattr(widget, "disconnect_signals"):
+                    try:
+                        widget.disconnect_signals()
+                    except Exception:
+                        pass
                 widget.deleteLater()
 
     def _on_bottom_bar_title_clicked(self) -> None:
@@ -419,9 +523,9 @@ class MainWindow(QMainWindow):
         view.play_all_requested.connect(self._on_play_all_requested)
 
         # Refresh dynamically when tracks change
-        self.store.tracks_added.connect(lambda: view.refresh())
-        self.store.track_removed.connect(lambda: view.refresh())
-        self.store.track_updated.connect(lambda: view.refresh())
+        self.store.tracks_added.connect(view.refresh_from_signal)
+        self.store.track_removed.connect(view.refresh_from_signal)
+        self.store.track_updated.connect(view.refresh_from_signal)
 
         idx = self.tabs.addTab(view, tab_title)
         self.tabs.setCurrentIndex(idx)
@@ -447,9 +551,9 @@ class MainWindow(QMainWindow):
         view.play_all_requested.connect(self._on_play_all_requested)
 
         # Refresh dynamically when tracks change
-        self.store.tracks_added.connect(lambda: view.refresh())
-        self.store.track_removed.connect(lambda: view.refresh())
-        self.store.track_updated.connect(lambda: view.refresh())
+        self.store.tracks_added.connect(view.refresh_from_signal)
+        self.store.track_removed.connect(view.refresh_from_signal)
+        self.store.track_updated.connect(view.refresh_from_signal)
 
         idx = self.tabs.addTab(view, tab_title)
         self.tabs.setCurrentIndex(idx)
@@ -471,9 +575,9 @@ class MainWindow(QMainWindow):
         view.play_all_requested.connect(self._on_play_all_requested)
 
         # Refresh dynamically when tracks change
-        self.store.tracks_added.connect(lambda: view.refresh())
-        self.store.track_removed.connect(lambda: view.refresh())
-        self.store.track_updated.connect(lambda: view.refresh())
+        self.store.tracks_added.connect(view.refresh_from_signal)
+        self.store.track_removed.connect(view.refresh_from_signal)
+        self.store.track_updated.connect(view.refresh_from_signal)
 
         idx = self.tabs.addTab(view, tab_title)
         self.tabs.setCurrentIndex(idx)

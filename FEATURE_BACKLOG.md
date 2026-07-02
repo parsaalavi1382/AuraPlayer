@@ -277,8 +277,7 @@ toggle. Full spec as given:
   in this genre: XXX" stat): ✅ COMPLETED in Step 5 (click a name, get a filtered track list).
 - **Tracks view Genre column** (after Album, before Duration): a
   straightforward column addition to the existing `TracksTableModel`.
-- **Edit Metadata Genres field:** depends on the metadata editor itself
-  existing (Step 6).
+- **Edit Metadata Genres field:** ✅ COMPLETED in Step 6 (fully supports multi-genre editing with tags and chip inputs).
 - **Search inclusion:** depends on the Step 9 search redesign (item #6)
   existing first -- genres become one more field the live search
   matches against.
@@ -304,6 +303,20 @@ that don't all exist yet:
     editor
   - Search inclusion + View menu → Step 9, alongside the search redesign
     and other top-bar/menu work
+
+---
+
+## 23. Automatic Folder Sync Mechanism
+**Status:** ✅ COMPLETED
+
+Implement a Git-like automatic synchronization mechanism for added folders:
+- Save metadata (.music-sync.json) in the app directory to store file lists, timestamps, and change logs.
+- Scan for changes (adds, deletes, edits) automatically on startup and every 30 seconds.
+- Provide a "Sync Now" manual trigger button in the Settings > Add Folder section.
+- Gracefully handle deleted or missing folders by prompting the user to Delete (remove from library) or Resync (try again), looping if the folder remains unreachable.
+- Red-highlight missing files (fully integrated with existing danger styling).
+- Lock the app with an ApplicationModal progress dialog during the first-time scanning/importing of a newly added folder to prevent race conditions or invalid states.
+- Fully atomic-style change logs to seamlessly resume interrupted scans when the app is restarted.
 
 ---
 

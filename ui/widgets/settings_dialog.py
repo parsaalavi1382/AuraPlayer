@@ -25,6 +25,8 @@ class SettingsDialog(QDialog):
     # to know anything about scanning/threading.
     folders_added = pyqtSignal(list)
     folder_removed = pyqtSignal(str)
+    # Emitted when a manual sync is requested by clicking "Sync Now".
+    sync_requested = pyqtSignal()
     # Emitted the instant the user picks a different theme (not gated
     # behind Save) so MainWindow can re-apply the stylesheet live.
     theme_changed = pyqtSignal(str)
@@ -51,13 +53,16 @@ class SettingsDialog(QDialog):
         self.add_folder_btn = QPushButton("Add Folder")
         self.add_folder_btn.setObjectName("accentButton")
         self.remove_folder_btn = QPushButton("Remove Selected")
+        self.sync_now_btn = QPushButton("Sync Now")
         folder_btn_row.addWidget(self.add_folder_btn)
         folder_btn_row.addWidget(self.remove_folder_btn)
+        folder_btn_row.addWidget(self.sync_now_btn)
         folder_btn_row.addStretch()
         layout.addLayout(folder_btn_row)
 
         self.add_folder_btn.clicked.connect(self._on_add_folder)
         self.remove_folder_btn.clicked.connect(self._on_remove_folder)
+        self.sync_now_btn.clicked.connect(self.sync_requested.emit)
 
         # --- Theme section ---
         theme_label = QLabel("THEME")
@@ -114,16 +119,31 @@ class SettingsDialog(QDialog):
             self.folder_list.addItem(QListWidgetItem(folder))
 
     def _on_add_folder(self) -> None:
+        import os
         folder = QFileDialog.getExistingDirectory(self, "Select Music Folder")
         if not folder:
             return
-        if folder in self.store.cache.settings.music_folders:
-            QMessageBox.information(self, "Already added", "This folder is already in your library.")
+        
+        # Normalize selected path
+        norm_folder = os.path.normpath(os.path.abspath(folder))
+        
+        # Check against normalized existing paths
+        existing_normalized = [
+            os.path.normpath(os.path.abspath(f))
+            for f in self.store.cache.settings.music_folders
+        ]
+        
+        if norm_folder in existing_normalized:
+            QMessageBox.warning(
+                self, "Already added",
+                "This folder (or an equivalent path) is already added to your library."
+            )
             return
-        self.store.cache.settings.music_folders.append(folder)
+            
+        self.store.cache.settings.music_folders.append(norm_folder)
         self.store.cache.save()
         self._refresh_folder_list()
-        self.folders_added.emit([folder])
+        self.folders_added.emit([norm_folder])
 
     def _on_remove_folder(self) -> None:
         item = self.folder_list.currentItem()
