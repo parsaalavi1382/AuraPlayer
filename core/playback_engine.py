@@ -77,11 +77,11 @@ class PlaybackEngine(QObject):
         self._connect_active_signals()
 
         # --- Queue / playback state ---
+        self._shuffle: bool = state.shuffle
         self._queue: list[str] = list(state.queue)
         self._queue_index: int = state.queue_index
         self._repeat_mode: str = state.repeat_mode
-        self._shuffle: bool = state.shuffle
-        self._shuffle_order: list[int] = []  # indices into _queue, when shuffle is on
+        self._original_queue: list[str] = list(self._queue)
 
         # --- Continuous position persistence ---
         self._save_timer = QTimer(self)
@@ -388,53 +388,43 @@ class PlaybackEngine(QObject):
         return self._repeat_mode
 
     def set_shuffle(self, enabled: bool) -> None:
-        """
-        وقتی دکمه Shuffle کلیک می‌شود، صف جدید و رندوم تشکیل شده
-        و پخش فوراً به اولین آهنگ صف جدید پرتاب می‌شود.
-        """
         self._shuffle = enabled
+        current_path = self.get_current_track_path()
         if enabled:
-            # ۱. ساختن صف کاملاً رندوم بدون اصرار به حفظ آهنگ فعلی در خانه اول
-            self._rebuild_shuffle_order(keep_current_first=False)
-            
-            # ۲. اگر صف رندوم با موفقیت ساخته شد، ایندکس را روی خانه اول آن می‌گذاریم
-            if self._shuffle_order:
-                self._queue_index = self._shuffle_order[0]
-                # ۳. پرتاب پخش به آهنگ جدید و بیدار کردن ماشین حالت
-                self._play_queue_index(self._queue_index)
-        else:
-            # وقتی شافل خاموش می‌شود، صف به حالت عادی برمی‌گردد
-            if self._shuffle_order and 0 <= self._queue_index < len(self._shuffle_order):
-                current_track_path = self._queue[self._shuffle_order[self._queue_index]]
-                self._shuffle_order = []
-                if current_track_path in self._queue:
-                    self._queue_index = self._queue.index(current_track_path)
+            # Shuffle the queue, keeping the currently playing track first
+            shuffled = list(self._original_queue)
+            if current_path is not None and current_path in shuffled:
+                shuffled.remove(current_path)
+                random.shuffle(shuffled)
+                self._queue = [current_path] + shuffled
+                self._queue_index = 0
             else:
-                self._shuffle_order = []
-            
-        self.store.cache.player_state.shuffle = enabled
-        self.store.cache.save()
-        self.shuffle_changed.emit(enabled)
+                random.shuffle(shuffled)
+                self._queue = shuffled
+                self._queue_index = 0 if self._queue else -1
+        else:
+            # Restore the original queue order
+            self._queue = list(self._original_queue)
+            if current_path is not None and current_path in self._queue:
+                self._queue_index = self._queue.index(current_path)
+            else:
+                self._queue_index = 0 if self._queue else -1
 
-    
+        self.store.cache.player_state.shuffle = enabled
+        self._persist_queue()
+        self.shuffle_changed.emit(enabled)
 
     def get_shuffle(self) -> bool:
         return self._shuffle
-
-    def _rebuild_shuffle_order(self, keep_current_first: bool = False) -> None:
-        """
-        یک لایه تصادفی کاملاً جدید و دگرگون‌شده برای صف پخش می‌سازد.
-        """
-        if not self._queue:
-            self._shuffle_order = []
-            return
-
         indices = list(range(len(self._queue)))
-        
-        # چون از متد بالا keep_current_first را False فرستادیم، 
-        # کل لیست بدون هیچ استثنایی کاملاً رندوم و زیرورو می‌شود.
-        random.shuffle(indices)
-        self._shuffle_order = indices
+        if keep_current_first and 0 <= self._queue_index < len(self._queue):
+            current_val = self._queue_index
+            other_indices = [idx for idx in indices if idx != current_val]
+            random.shuffle(other_indices)
+            self._shuffle_order = [current_val] + other_indices
+        else:
+            random.shuffle(indices)
+            self._shuffle_order = indices
 
     # ============================================================
     # Queue management
@@ -446,10 +436,6 @@ class PlaybackEngine(QObject):
         return self._queue_index
 
     def play_all(self, track_paths: list[str], shuffle: bool = False, start_track_path: Optional[str] = None) -> None:
-        """
-        کل لیست را بدون تغییر در ترتیب اصلی وارد صف می‌کند.
-        اگر آهنگ مشخصی انتخاب شده باشد، ایندکس صف را روی آن تنظیم کرده و پخش می‌کند.
-        """
         seen = set()
         deduped = []
         for p in track_paths:
@@ -457,27 +443,27 @@ class PlaybackEngine(QObject):
                 seen.add(p)
                 deduped.append(p)
 
-        self._queue = deduped
+        self._original_queue = list(deduped)
         self._shuffle = shuffle
         
-        # ۱. پیدا کردن ایندکس آهنگ انتخاب شده در لیست اصلی
-        start_index = 0
-        if start_track_path is not None and start_track_path in self._queue:
-            start_index = self._queue.index(start_track_path)
-        
-        # ۲. مدیریت وضعیت شافل (اگر روشن بود، کل صف مخلوط می‌شود اما آهنگ فعلی در جایگاه اول شافل قرار می‌گیرد)
         if shuffle:
-            self._rebuild_shuffle_order(keep_current_first=True)
-            # در حالت شافل، ایندکس صف ما باید اشاره کند به موقعیت این آهنگ در لایه شافل
-            if start_track_path in self._queue:
-                self._queue_index = start_index
+            shuffled = list(deduped)
+            if start_track_path is not None and start_track_path in shuffled:
+                shuffled.remove(start_track_path)
+                random.shuffle(shuffled)
+                self._queue = [start_track_path] + shuffled
+                self._queue_index = 0
             else:
-                self._queue_index = self._shuffle_order[0] if self._shuffle_order else 0
+                random.shuffle(shuffled)
+                self._queue = shuffled
+                self._queue_index = 0 if self._queue else -1
         else:
-            self._shuffle_order = []
+            self._queue = list(deduped)
+            start_index = 0
+            if start_track_path is not None and start_track_path in self._queue:
+                start_index = self._queue.index(start_track_path)
             self._queue_index = start_index if self._queue else -1
 
-        # ۳. ذخیره صف و بیدار کردن ماشین حالت برای پخش آهنگ انتخاب‌شده
         self._persist_queue()
         self.queue_changed.emit()
         self.shuffle_changed.emit(shuffle)
@@ -487,18 +473,23 @@ class PlaybackEngine(QObject):
     
     def play_next(self, track_path: str) -> None:
         current_path = self.get_current_track_path()
+        self._remove_from_original_queue_silently(track_path)
         self._remove_from_queue_silently(track_path)
 
-        if current_path is not None and current_path in self._queue:
-            insert_at = self._queue.index(current_path) + 1
-        elif current_path is not None and current_path == track_path:
-            insert_at = 0
-        elif self._queue_index < 0:
-            insert_at = 0
+        # Insert into original queue after current track
+        if current_path is not None and current_path in self._original_queue:
+            insert_at_orig = self._original_queue.index(current_path) + 1
         else:
-            insert_at = min(self._queue_index + 1, len(self._queue))
+            insert_at_orig = max(0, self._queue_index + 1)
+        self._original_queue.insert(insert_at_orig, track_path)
 
-        self._queue.insert(insert_at, track_path)
+        # Insert into active queue after current track index
+        if 0 <= self._queue_index < len(self._queue):
+            insert_at_act = self._queue_index + 1
+        else:
+            insert_at_act = 0
+        self._queue.insert(insert_at_act, track_path)
+
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
@@ -510,8 +501,11 @@ class PlaybackEngine(QObject):
         current_path = self.get_current_track_path()
         was_empty_or_stopped = current_path is None or self._active.source().isEmpty()
 
+        self._remove_from_original_queue_silently(track_path)
         self._remove_from_queue_silently(track_path)
+        self._original_queue.append(track_path)
         self._queue.append(track_path)
+        
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
@@ -522,6 +516,7 @@ class PlaybackEngine(QObject):
 
     def remove_from_queue(self, track_path: str) -> None:
         was_current = (0 <= self._queue_index < len(self._queue) and self._queue[self._queue_index] == track_path)
+        self._remove_from_original_queue_silently(track_path)
         self._remove_from_queue_silently(track_path)
         self._persist_queue()
         self.queue_changed.emit()
@@ -540,9 +535,14 @@ class PlaybackEngine(QObject):
             raise ValueError("reorder_queue() received a different set of tracks.")
         current_path = self._queue[self._queue_index] if 0 <= self._queue_index < len(self._queue) else None
         self._queue = list(new_order)
+        self._original_queue = list(new_order)
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
+
+    def _remove_from_original_queue_silently(self, track_path: str) -> None:
+        if track_path in self._original_queue:
+            self._original_queue.remove(track_path)
 
     def _remove_from_queue_silently(self, track_path: str) -> None:
         if track_path in self._queue:
@@ -601,22 +601,8 @@ class PlaybackEngine(QObject):
     def _compute_next_index(self, from_index: int) -> Optional[int]:
         if not self._queue:
             return None
-
         if self._repeat_mode == "one":
             return from_index
-
-        if self._shuffle and self._shuffle_order:
-            try:
-                pos_in_shuffle = self._shuffle_order.index(from_index)
-            except ValueError:
-                pos_in_shuffle = -1
-            next_pos = pos_in_shuffle + 1
-            if next_pos < len(self._shuffle_order):
-                return self._shuffle_order[next_pos]
-            if self._repeat_mode == "all":
-                return self._shuffle_order[0]
-            return None
-
         next_index = from_index + 1
         if next_index < len(self._queue):
             return next_index
@@ -631,7 +617,9 @@ class PlaybackEngine(QObject):
             return len(self._queue) - 1
         prev_idx = current - 1
         if prev_idx < 0:
-            return len(self._queue) - 1
+            if self._repeat_mode == "all":
+                return len(self._queue) - 1
+            return None
         return prev_idx
 
     def _perform_gapless_handoff(self) -> None:

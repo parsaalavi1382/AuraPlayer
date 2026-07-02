@@ -9,8 +9,8 @@
 | Step 1 | ✅ Done | 2026-06-28 |
 | Step 2 | ✅ Done | 2026-06-28 |
 | Step 3 | ✅ Done | 2026-06-29 |
-| Step 4 | 🔜 Planned | - |
-| Step 5 | 🔜 Planned | - |
+| Step 4 | ✅ Done | 2026-06-30 |
+| Step 5 | ✅ Done | 2026-07-01 |
 | Step 6 | 🔜 Planned | - |
 | Step 7 | 🔜 Planned | - |
 | Step 8 | 🔜 Planned | - |
@@ -168,27 +168,36 @@
   duration index and tag storage, unlike bare `.aac`.) May be revisited
   in a future version per the person's note.
 
-### 🔜 Step 4: Player Screen
-**Status:** Planned
+### ✅ Step 4: Player Screen
+**Status:** Done
+**Date:** 2026-06-30
 **Deliverables:**
-- [Placeholder — full Player Screen: album art, progress bar with
-  click-to-seek, transport controls, lyrics panel toggle, queue panel
-  toggle, More menu, Favorite (❤️) toggle. The volume slider + output
-  device selector (`VolumeOutputControl`, bottom-right per spec) are
-  ALREADY BUILT and fully wired to the engine as of Step 3 — this step
-  just needs to place the existing widget in the Player Screen's
-  layout, not build it from scratch — see `FEATURE_BACKLOG.md` items
-  #10, #12, #13]
+- Slides up from the bottom bar when clicked, slides down when back button is pressed.
+- Displays large beautiful album art, track title, artists, seek bar, and fully functional transport controls.
+- Heart button moved dynamically to be centered right under the play/back/next transport controls (inside the bottom toggles layout, between lyrics and queue buttons).
+- Updated the heart icon to render filled red when favorited (checked) and outlined when unchecked, ensuring seamless visual feedback.
+- Implemented a complete volume control system directly in the player screen, placing a horizontal volume slider and toggleable speaker/mute button in the bottom right. When the volume slider is changed, the engine's playback volume is updated, and when volume is 0, the mute icon appears. Speaker and mute toggle with each other to restore the previous non-zero volume.
+- Standardized the speaker and mute button icons (`Speaker_Icon.svg`, `Mute.svg`) to use standard `fill="currentColor" stroke="none"` vectors. Updated the player screen mute logic to draw the speaker/mute icon in `text_primary` instead of `text_secondary` in all states, ensuring the speaker button has the exact same visual weight and theme-adaptive color as the main play/pause transport controls across all 4 themes.
+- Added a symmetrical layout spacer on the left side of the player screen bottom toggles bar to keep the core buttons (lyrics, heart, queue, headphones) perfectly mathematically centered on any screen size.
+- Fully wired the player screen next/prev button hold timeouts so they correctly transition to seek/scrub states and do not accidentally trigger single-click next/previous track skips upon mouse release.
+- Integrated a headphone icon on the right side of the queue button to list and change available audio devices via an elegant, theme-aware popup context menu, without opening any secondary window.
+- SVG icons render beautifully and adapt dynamically to all 4 app themes (Dark, Light, Midnight Blue, Warm Amber) by replacing hardcoded fills and automatically scaling icon overlays (e.g., slashes for repeat/shuffle off, "1" indicator for repeat-one) based on custom viewBox sizes (32x32 vs 24x24).
+- Corrected shuffle behavior to avoid skipping or jumping to a random song when turning shuffle ON or OFF, keeping the active track seamlessly playing in its current queue position.
+- Added dynamic mouse hover event tracking in `clickable_label.py` to elegantly underline and highlight artist/album text on hover, matching native hyperlink feedback.
+- Properly wired the table row click signals (`artist_requested` and `album_requested`) from the `TracksView` to `MainWindow`'s stub navigation routes, ensuring clean interaction paths for when those full pages are built.
+- **Verified Status of Album Cover Row States:** Confirmed that the "Album cover displayed on the left side of track name in the menu/track list" feature (with State A, State B, State C for playing, paused-hover, and paused-no-hover) is currently **NOT** completed in Steps 1 to 4. The `TrackHoverDelegate` title column currently delegates to standard text rendering, so this feature has been documented and updated as a high-priority item in `FEATURE_BACKLOG.md` (Item #4) to be implemented in a future step.
 
-### 🔜 Step 5: Album Page + Artist Page + Genre Page
-**Status:** Planned
+### ✅ Step 5: Album Page + Artist Page + Genre Page
+**Status:** Done
+**Date:** 2026-07-01
 **Deliverables:**
-- [Placeholder — dedicated Album Page (grouped by disc number), Artist
-  Page (Albums / Appears On / full track list), and Genre Page (same
-  list shape as Tracks view, filtered to one genre, "Tracks in this
-  genre: XXX" stat — see `FEATURE_BACKLOG.md` item #22), plus clickable
-  artist/album/genre navigation everywhere in the app, with dynamic tab
-  titles ("Name | Artist" / "Name | Album" / "Name | Genre")]
+- **ArtistPageView:** A comprehensive, beautiful dedicated artist page that displays artist stats (track counts), a list of albums they are the main artist of, an "Appears On" section for guest/contributor tracks, and a full track table.
+- **AlbumPageView:** A beautiful dedicated album page displaying a large album cover, release year, duration stats, and album artists (clickable buttons). The tracks are automatically grouped by disc number, rendering separate tables for multi-disc releases. The first column displays the track number, which morphs into a play overlay button on hover and an animated equalizer during playback.
+- **GenrePageView:** A dynamic genre page showing tracks in that genre along with count stats, and supporting instant "Play Genre" and "Shuffle" operations.
+- **Genres Tab (GenresView):** Implemented a complete Genres list tab (Name, track count) sorted alphabetically, matching the design of the Artists/Albums tabs. Double-clicking any genre row immediately loads the dedicated Genre Page.
+- **Dynamic Tab Titles & Management:** Dynamically-created page tabs are labeled elegantly as `Name | Type` (e.g. `Travis Scott | Artist`, `Rodeo | Album`, `Pop | Genre`).
+- **Tab Closability:** Dynamic page tabs are closable (via an elegant "X" close button), while permanent core tabs (Tracks, Artists, Genres, Albums, Playlists) are locked and cannot be closed.
+- **Auto-Refresh Integration:** Connected all dynamic page views to the `LibraryStore` metadata signals (`tracks_added`, `track_removed`, `track_updated`) to ensure page content live-updates if files are added, modified, or removed.
 
 ### 🔜 Step 6: Metadata Editing
 **Status:** Planned
@@ -264,3 +273,13 @@
   requested during Step 2 review (tab titles, full right-click menu,
   hover states, smart playlists, drag & drop, favorites, export, etc.)
   and which step each is scheduled for.
+
+- **Album Cover with Playback States in Tracks List** (completed 2026-07-01): ✅ Done.
+  Implemented album art display in the track list within `TrackHoverDelegate` for the Title column.
+  - Displays the embedded album art (from metadata) or a beautifully stylized theme-adaptive fallback placeholder.
+  - Implements the three requested states:
+    - **State A - Current song is PLAYING:** Show active 3-bar animated equalizer, and dim the cover.
+    - **State B - Current song is PAUSED + Cursor HOVER:** Show a play overlay icon (▶), and dim the cover.
+    - **State C - Current song is PAUSED + No Hover:** Show the album cover at normal brightness.
+  - Added a dynamic repaint loop driven by an animation timer when tracks are active, making the equalizer visually pulse smoothly like a professional audio visualizer.
+

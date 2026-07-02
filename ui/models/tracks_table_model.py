@@ -22,8 +22,9 @@ from core.models import Track
 COL_TITLE = 0
 COL_ARTISTS = 1
 COL_ALBUM = 2
-COL_DURATION = 3
-COLUMN_HEADERS = ["Title", "Artist(s)", "Album", "Duration"]
+COL_GENRE = 3
+COL_DURATION = 4
+COLUMN_HEADERS = ["Title", "Artist(s)", "Album", "Genre", "Duration"]
 
 
 def format_duration(seconds: float) -> str:
@@ -92,6 +93,8 @@ class TracksTableModel(QAbstractTableModel):
                 return ", ".join(track.artists)
             if col == COL_ALBUM:
                 return track.album
+            if col == COL_GENRE:
+                return track.genre or "—"
             if col == COL_DURATION:
                 return format_duration(track.duration)
 
@@ -169,10 +172,11 @@ class TracksTableModel(QAbstractTableModel):
     def sort_alphabetical(self, column: int = COL_TITLE) -> None:
         self.layoutAboutToBeChanged.emit()
         key_fn = {
-            COL_TITLE: lambda t: t.title.lower(),
+            COL_TITLE: lambda t: (t.title or "").lower(),
             COL_ARTISTS: lambda t: ", ".join(t.artists).lower(),
-            COL_ALBUM: lambda t: t.album.lower(),
-            COL_DURATION: lambda t: t.duration,
+            COL_ALBUM: lambda t: (t.album or "").lower(),
+            COL_GENRE: lambda t: (t.genre or "").lower(),
+            COL_DURATION: lambda t: t.duration or 0,
         }[column]
         self._tracks.sort(key=key_fn)
         self.layoutChanged.emit()

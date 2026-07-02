@@ -6,6 +6,8 @@ history. Each gets implemented when the step it naturally belongs to
 arrives, and gets checked off + dated here when done.
 
 ## 1. Tab titles show type
+**Status:** ✅ COMPLETED
+
 "Travis Scott | Artist", "Rodeo | Album", "My Favorites | Playlist"
 on dynamically-opened tabs.
 **Fits:** Step 5 (Artist/Album pages) + Step 7 (Playlists), since that's
@@ -21,16 +23,26 @@ Properties dialog can land alongside Step 6 since it needs the same
 tag-reading path as the editor.
 
 ## 3. Left-click behavior on rows
+**Status:** ✅ COMPLETED
+
 Click artist name -> open "Name | Artist" tab (underline on hover).
 Click album name -> open "Name | Album" tab (underline on hover).
 Click elsewhere on row -> play track.
 **Fits:** Step 5, when Artist/Album pages exist to navigate to.
 
-## 4. Album art / track number hover + playing states
-Normal / hover-not-playing (▶ overlay) / playing (3-bar viz) /
-hover-while-playing (keep viz, no play icon).
-**Fits:** Step 3/4, once the playback engine can drive real "is playing"
-state per row.
+## 4. Album cover displayed on the left side of track name in the menu/track list
+**Status:** ✅ COMPLETED
+
+This feature displays the track's album cover thumbnail on the left side of the track name in the tracks list, with three dynamic visual states depending on playback and hover states:
+
+- **State A - Current song is PLAYING:**
+  - Show an animation with 3 bars moving up and down (like a chart/equalizer)
+  - Reduce album cover brightness (darker appearance)
+- **State B - Current song is PAUSED + Cursor HOVER:**
+  - Show a play icon (▶) overlaid on the album cover
+  - Reduce album cover brightness (darker appearance)
+- **State C - Current song is PAUSED + No Hover:**
+  - Show the album cover in normal state (full brightness, no overlay)
 
 ## 5. Lyrics panel — Edit Lyrics button
 ✏️ button at the bottom of the lyrics panel in both synced and
@@ -252,12 +264,9 @@ toggle. Full spec as given:
   Plan is to reuse the exact same active-separator list for genres
   unless told otherwise -- flagging so this isn't a silent assumption.
 - **Genres tab** (list + count, A-Z default sort, "Total Genres: XXX"
-  stat): a new tab between Artists and Albums, following the existing
-  Artists-tab pattern (same `QAbstractTableModel` approach).
+  stat): ✅ COMPLETED in Step 5 (a new tab between Artists and Albums).
 - **Genre page** (dynamic tab, same shape as a Tracks-view list, "Tracks
-  in this genre: XXX" stat): depends on the dynamic-tab infrastructure
-  (tab titles like "Name | Type") already tracked as item #1, plus
-  Artist/Album page navigation patterns from Step 5.
+  in this genre: XXX" stat): ✅ COMPLETED in Step 5 (click a name, get a filtered track list).
 - **Tracks view Genre column** (after Album, before Duration): a
   straightforward column addition to the existing `TracksTableModel`.
 - **Edit Metadata Genres field:** depends on the metadata editor itself

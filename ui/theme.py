@@ -19,6 +19,11 @@ Four themes are offered:
     black too stark -- same dark-theme ergonomics, different mood.
   - warm_amber: a warm, low-blue-light dark theme with an amber/orange
     accent instead of violet -- suits evening listening.
+
+Step 4 additions:
+  - #seekBarTime QLabel rule (time labels flanking the seek groove)
+  - #playerScreen background rule (the full-screen overlay)
+  - All rules use theme variables so every theme is covered.
 """
 
 from __future__ import annotations
@@ -39,16 +44,11 @@ THEMES: dict[str, dict[str, str]] = {
     },
     "light": {
         "label": "Light",
-        # Off-white rather than pure #FFFFFF -- pure white next to pure
-        # black text is harsher than it needs to be for a media app
-        # people look at for long sessions.
         "bg": "#F7F7F9",
         "surface": "#FFFFFF",
         "surface_hover": "#EFEFF4",
         "surface_selected": "#E6E1FB",
         "border": "#DCDCE3",
-        # Text is a very dark grey, not pure black -- softer on long
-        # reading sessions while staying easily legible.
         "text_primary": "#1C1E22",
         "text_secondary": "#6B7280",
         "accent": "#6C5CE7",
@@ -85,11 +85,10 @@ THEMES: dict[str, dict[str, str]] = {
 
 DEFAULT_THEME = "dark"
 
-FONT_FAMILY = "Segoe UI, -apple-system, sans-serif"  # Segoe UI is the Windows-native pick
+FONT_FAMILY = "Segoe UI, -apple-system, sans-serif"
 
 
 def theme_choices() -> list[tuple[str, str]]:
-    """Returns [(key, label), ...] in a fixed, deliberate display order."""
     order = ["dark", "light", "midnight_blue", "warm_amber"]
     return [(key, THEMES[key]["label"]) for key in order if key in THEMES]
 
@@ -102,6 +101,24 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             color: {c['text_primary']};
             font-family: {FONT_FAMILY};
             font-size: 13px;
+        }}
+
+        QLabel {{
+            background: transparent;
+        }}
+
+        QWidget#bottomBarArtistContainer, QWidget#playerArtistContainer {{
+            background-color: transparent;
+            background: transparent;
+            border: none;
+        }}
+
+        QLabel#bottomBarTitle {{
+            font-weight: 600;
+        }}
+
+        QLabel#clickableLabel:hover, QLabel#playerTitle:hover, QLabel#playerArtist:hover, QLabel#bottomBarArtist:hover, QLabel#bottomBarTitle:hover {{
+            text-decoration: underline;
         }}
 
         QTabWidget::pane {{
@@ -279,6 +296,11 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             color: {c['text_secondary']};
             font-size: 11px;
             font-style: italic;
+        }}
+
+        QLabel#seekBarTime {{
+            color: {c['text_secondary']};
+            font-size: 11px;
         }}
 
         QFrame#bottomBar {{
