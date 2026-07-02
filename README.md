@@ -45,7 +45,9 @@ AuraPlayer is **currently in progress and is not yet fully completed**. Core pla
 *   Features immediate, single-click theme switching in Settings: **Dark (default)**, **Light**, **Midnight Blue**, and **Warm Amber**.
 *   The entire stylesheet re-renders in real-time without requiring a restart, and your selection is saved.
 
-### 6. Smart Multi-Artist & Separator Support: Tired of music players creating weird combo-artists like *"Artist A & Artist B"*? AuraPlayer is smarter. It automatically parses common separators (like `,`, `&`, `feat.`, `ft.`) to split tracks and neatly display them under the individual profile of each contributing artist. Your library stays perfectly organized. You can also add custom seprator in settings.
+### 6. Smart Multi-Artist & Separator Support:
+*    Tired of music players creating weird combo-artists like *"Artist A & Artist B"*? AuraPlayer is smarter. It automatically parses common separators (like `,`, `&`, `feat.`, `ft.`) to split tracks and neatly display them under the individual profile of each contributing artist. Your library stays perfectly organized.
+*    You can also add custom seprator in settings.
 ---
 
 ## 🚀 Installation & Setup
