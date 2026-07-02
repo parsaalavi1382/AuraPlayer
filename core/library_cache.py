@@ -83,7 +83,31 @@ class LibraryCache:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            os.replace(tmp_path, self.cache_path)
+            
+            # Retry replacement a few times to account for transient Windows/antivirus file locks
+            import time
+            success = False
+            for attempt in range(5):
+                try:
+                    os.replace(tmp_path, self.cache_path)
+                    success = True
+                    break
+                except PermissionError:
+                    if attempt < 4:
+                        time.sleep(0.05)
+                    else:
+                        raise
+        except PermissionError:
+            # Fall back to writing directly to the target file if replacement is persistently denied on Windows
+            try:
+                with open(self.cache_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                raise
         except Exception:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)

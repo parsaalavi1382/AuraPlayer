@@ -109,26 +109,10 @@ class AlbumGridWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # Scroll Area for horizontal layout
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll_area.setStyleSheet("background: transparent; border: none;")
-        
-        self.container = QWidget()
-        self.container.setStyleSheet("background: transparent;")
-        self.row_layout = QHBoxLayout(self.container)
-        self.row_layout.setContentsMargins(0, 0, 0, 0)
-        self.row_layout.setSpacing(8)  # Reduced gap/spacing (items closer together)
-        self.row_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        
-        self.scroll_area.setWidget(self.container)
-        layout.addWidget(self.scroll_area)
+        self.grid_layout = QGridLayout(self)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setSpacing(12)  # Nice space between rows and columns
+        self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         
         self._albums = []
         self._is_appears_on = False
@@ -140,8 +124,8 @@ class AlbumGridWidget(QWidget):
 
     def rebuild_grid(self, container_width: int = 0):
         # Clear existing layout items
-        while self.row_layout.count():
-            item = self.row_layout.takeAt(0)
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
                 
@@ -149,14 +133,27 @@ class AlbumGridWidget(QWidget):
             self.setFixedHeight(0)
             return
             
-        for key, name, year, track_path, main_artist in self._albums:
+        card_width = 158
+        card_height = 220 if self._is_appears_on else 200
+        spacing = 12
+        
+        # Calculate how many columns can fit in container_width
+        if container_width <= 0:
+            container_width = 500  # Safe fallback
+            
+        max_cols = max(1, (container_width + spacing) // (card_width + spacing))
+        
+        for idx, (key, name, year, track_path, main_artist) in enumerate(self._albums):
+            row = idx // max_cols
+            col = idx % max_cols
             card = AlbumCard(key, name, track_path, is_appears_on=self._is_appears_on, main_artist=main_artist)
             card.clicked.connect(self.album_clicked.emit)
-            self.row_layout.addWidget(card)
+            self.grid_layout.addWidget(card, row, col)
             
-        self.row_layout.addStretch()
-        # Set fixed height of this component to show cards and scrollbars beautifully without clipping
-        self.setFixedHeight(238 if self._is_appears_on else 216)
+        # Set dynamic height of this component to show all wrapped rows beautifully
+        num_rows = (len(self._albums) + max_cols - 1) // max_cols
+        total_height = num_rows * card_height + (num_rows - 1) * spacing
+        self.setFixedHeight(total_height)
 
 
 class ArtistPageView(QWidget):
@@ -350,7 +347,11 @@ class ArtistPageView(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.rebuild_grids_with_current_width()
+        QTimer.singleShot(0, self.rebuild_grids_with_current_width)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self.rebuild_grids_with_current_width)
 
     def rebuild_grids_with_current_width(self):
         # Determine available width for grids
@@ -417,7 +418,7 @@ class ArtistPageView(QWidget):
             self.appears_on_container.setVisible(False)
 
         # Rebuild grid layout sizing and table height
-        self.rebuild_grids_with_current_width()
+        QTimer.singleShot(0, self.rebuild_grids_with_current_width)
 
     def _on_row_double_clicked(self, index) -> None:
         track = self.model.track_at(index.row())
