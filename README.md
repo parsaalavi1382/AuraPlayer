@@ -123,8 +123,8 @@ python main.py
 
 To see what is currently planned or what has been achieved so far, check out our development logs:
 
-* 📋 **[Feature Backlog](https://www.google.com/search?q=FEATURE_BACKLOG.md):** Detailed look at upcoming tasks, including the **Complete Playlist System** (Manual & Smart Playlists) and **Lyrics Display Integration**.
-* 🪵 **[Progress Log](https://www.google.com/search?q=PROGRESS_LOG.md):** Track day-to-day development history, implemented logic, and completed milestones.
+* 📋 **[Feature Backlog](FEATURE_BACKLOG.md):** Detailed look at upcoming tasks, including the **Complete Playlist System** (Manual & Smart Playlists) and **Lyrics Display Integration**.
+* 🪵 **[Progress Log](PROGRESS_LOG.md):** Track day-to-day development history, implemented logic, and completed milestones.
 
 ---
 
