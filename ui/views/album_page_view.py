@@ -108,7 +108,7 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         col = index.column()
-        if col not in (COL_TRACK_NO, COL_TITLE, COL_ARTISTS):
+        if col not in (COL_TRACK_NO, COL_TITLE, COL_ARTISTS, COL_GENRE):
             super().paint(painter, option, index)
             return
 
@@ -241,6 +241,41 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
                     painter.drawText(x_offset, y_baseline, comma)
                     x_offset += comma_width
 
+        elif col == COL_GENRE:
+            genre_text = track.genre or "—"
+            if genre_text and genre_text != "—" and genre_text != "-":
+                genres = [g.strip() for g in genre_text.split(",") if g.strip()]
+                x_offset = rect.left()
+                for i, genre in enumerate(genres):
+                    genre_width = fm.horizontalAdvance(genre)
+                    genre_rect = QRect(x_offset, rect.top(), genre_width, rect.height())
+
+                    genre_hovered = is_row_hovered and rect.contains(self.mouse_pos) and genre_rect.contains(self.mouse_pos)
+
+                    font = painter.font()
+                    font.setUnderline(genre_hovered)
+                    painter.setFont(font)
+
+                    if option.state & QStyle.StateFlag.State_Selected:
+                        painter.setPen(QColor(theme['text_primary']))
+                    else:
+                        painter.setPen(QColor(theme['accent'] if genre_hovered else theme['text_secondary']))
+
+                    painter.drawText(x_offset, y_baseline, genre)
+                    x_offset += genre_width
+
+                    if i < len(genres) - 1:
+                        comma = ", "
+                        comma_width = fm.horizontalAdvance(comma)
+                        font.setUnderline(False)
+                        painter.setFont(font)
+                        painter.setPen(QColor(theme['text_secondary']))
+                        painter.drawText(x_offset, y_baseline, comma)
+                        x_offset += comma_width
+            else:
+                painter.setPen(QColor(theme['text_secondary']))
+                painter.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, genre_text)
+
         painter.restore()
 
 
@@ -281,6 +316,30 @@ class AlbumHoverEventFilter(QObject):
                         self.table.setCursor(Qt.CursorShape.PointingHandCursor)
                     else:
                         self.table.setCursor(Qt.CursorShape.ArrowCursor)
+                elif col == COL_GENRE:
+                    # Check if over genre text
+                    rect = self.table.visualRect(index).adjusted(6, 0, -6, 0)
+                    fm = self.table.fontMetrics()
+                    genre_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+                    if genre_text and genre_text != "—" and genre_text != "-":
+                        genres = [g.strip() for g in genre_text.split(",") if g.strip()]
+                        
+                        x_offset = rect.left()
+                        over_genre = False
+                        for genre in genres:
+                            genre_width = fm.horizontalAdvance(genre)
+                            genre_rect = QRect(x_offset, rect.top(), genre_width, rect.height())
+                            if genre_rect.contains(pos):
+                                over_genre = True
+                                break
+                            x_offset += genre_width + fm.horizontalAdvance(", ")
+
+                        if over_genre:
+                            self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                        else:
+                            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+                    else:
+                        self.table.setCursor(Qt.CursorShape.ArrowCursor)
                 else:
                     self.table.setCursor(Qt.CursorShape.ArrowCursor)
             else:
@@ -315,6 +374,22 @@ class AlbumHoverEventFilter(QObject):
                                 self.view.artist_requested.emit(artist)
                                 return True
                             x_offset += artist_width + fm.horizontalAdvance(", ")
+                    elif col == COL_GENRE:
+                        rect = self.table.visualRect(index).adjusted(6, 0, -6, 0)
+                        fm = self.table.fontMetrics()
+                        genre_text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+                        if genre_text and genre_text != "—" and genre_text != "-":
+                            genres = [g.strip() for g in genre_text.split(",") if g.strip()]
+                            
+                            x_offset = rect.left()
+                            for genre in genres:
+                                genre_width = fm.horizontalAdvance(genre)
+                                genre_rect = QRect(x_offset, rect.top(), genre_width, rect.height())
+                                if genre_rect.contains(pos):
+                                    if hasattr(self.view, "genre_requested"):
+                                        self.view.genre_requested.emit(genre)
+                                    return True
+                                x_offset += genre_width + fm.horizontalAdvance(", ")
 
         return super().eventFilter(obj, event)
 
@@ -323,6 +398,7 @@ class AlbumPageView(QWidget):
     track_double_clicked = pyqtSignal(str)
     album_requested = pyqtSignal(str)
     artist_requested = pyqtSignal(str)
+    genre_requested = pyqtSignal(str)
     play_all_requested = pyqtSignal(list, bool)
 
     def __init__(self, album_key: str, store: LibraryStore, engine=None, parent=None):

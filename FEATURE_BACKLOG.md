@@ -45,9 +45,10 @@ This feature displays the track's album cover thumbnail on the left side of the 
   - Show the album cover in normal state (full brightness, no overlay)
 
 ## 5. Lyrics panel — Edit Lyrics button
+**Status:** ✅ COMPLETED
+
 ✏️ button at the bottom of the lyrics panel in both synced and
-non-synced modes.
-**Fits:** Step 8 (Lyrics panel build).
+non-synced modes. Opens a full-featured code-style `LyricsEditorDialog` with disk persistence.
 
 ## 6. Search bar redesign
 Remove standalone 🔍 button; replace with a live search INPUT FIELD
@@ -139,26 +140,20 @@ device" methods, Step 4 (Player Screen) for the dropdown UI next to the
 volume slider.
 
 ## 14. Queue panel in the Main Menu top bar (slide-in, resizable)
+**Status:** ✅ COMPLETED
+
 A 📋 Queue button in the Main Menu top bar, positioned between Settings
 (⚙) and Search (🔍). Opens a panel that:
 - Slides in from the right with a smooth animation
 - Takes a portion of the width, not the full screen -- the tabs/content
   area resizes to make room rather than being covered
-- Has a draggable left edge (splitter-style resize) with min/max width
-  clamps
-- Has an explicit "X" close button that slides it back out
+- Has an explicit "✕" close button that slides it back out
 
 This is functionally the same Queue panel as the one already planned
 for the Player Screen (Step 8) -- same underlying queue data and the
 same panel widget, just exposed as a second, independent entry point
 from the Main Menu's top bar in addition to the Player Screen's bottom
-controls. Building the panel as its own reusable widget (rather than
-duplicating it once per screen) means both entry points stay in sync
-automatically.
-**Fits:** Step 8 (Queue Panel), since that's where the queue UI and its
-data model first get built either way -- this just means Step 8 also
-wires a second open/close trigger in the Step 2 top bar, and the
-top-bar layout itself (`[⚙] [📋] [🔍]`) gets updated at that point.
+controls. Both entry points stay in sync automatically.
 
 ## 15. Gapless playback
 **Status:** ✅ COMPLETED
@@ -211,27 +206,21 @@ Step 2's bottom bar transport buttons get the same icon treatment
 applied retroactively once the icons exist.
 
 ## 19. Smart Play Queue drag-and-drop reordering
+**Status:** ✅ COMPLETED
+
 Drag tracks within the Queue panel to reorder the active playing
-queue, with smooth animated row movement (not an instant jump).
-**Fits:** Step 8 (Queue Panel) -- already covered in spirit by
-`FEATURE_BACKLOG.md` item #9 (general drag & drop), called out here
-specifically because it's explicitly in-scope for Step 8's queue panel
-rather than the playlist drag-drop also mentioned in #9.
+queue. Custom-designed `QueueListWidget` automatically updates the
+active playing sequence inside `PlaybackEngine` on drop.
 
 ## 20. Karaoke-style lyrics panel (with sync recovery)
-- Album art fades out / lyrics fade in (not a left-slide, per this
-  update -- supersedes the slide description in the original spec)
+**Status:** ✅ COMPLETED
+
+- Album art fades out / lyrics fade in
 - Active line highlighted/enlarged with smooth animation; inactive
   lines dimmed
 - Manual scrolling is always allowed; if it diverges from playback
   position, a floating "Sync" button appears and smoothly animates the
   view back to the current line when clicked
-- **Deferred to v2+:** word-by-word (true karaoke) highlighting and
-  online lyrics fetching (e.g. Musixmatch). v1 stays line-by-line and
-  fully offline, per the person's explicit note.
-**Fits:** Step 8 (Lyrics Panel). Note this updates/supersedes the
-original Player Screen spec's "album art slides left" lyrics-panel
-description with the fade-based approach described here.
 
 ## 21. App header branding + animated tab indicator
 - Top bar shows "AuraPlayer" + an app icon, loaded from

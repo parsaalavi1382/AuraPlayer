@@ -12,7 +12,7 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ## ⚠️ Project Status: In Development
 
-AuraPlayer is **currently in progress and is not yet fully completed**. Core playback, library scanning, custom themes, and dynamic page navigation are completely functional. Secondary features like metadata editing, playlist modification, and the slide-out queue/lyrics panel are scheduled for subsequent roadmap steps.
+AuraPlayer is **currently in progress and is not yet fully completed**. Core playback, library scanning, custom themes, dynamic page navigation, metadata editing, and the slide-out queue/lyrics panels are completely functional. Secondary features like playlist modification are scheduled for subsequent roadmap steps.
 
 🐛 **Found a bug?** Please report any issues or feedback in the **Issues** section of the repository!
 
@@ -58,6 +58,14 @@ AuraPlayer is **currently in progress and is not yet fully completed**. Core pla
 * **Real-Time Themes:** Features immediate, single-click theme switching in Settings: **Dark (default)**, **Light**, **Midnight Blue**, and **Warm Amber**. The entire design updates instantly without needing to restart.
 * **Custom Separation Manager:** In the settings screen, you can easily add, edit, or toggle the specific words or symbols (like commas or 'feat.') that AuraPlayer uses to split multiple artists, giving you ultimate control over how your library is organized.
 * **Remembers Window Preferences:** AuraPlayer automatically remembers your window size, position, and layout preferences across restarts, so it always reopens exactly how you left it.
+
+### 6. Interactive Synced Lyrics & Dynamic Playback Queue Panel
+* **Karaoke-Style Lyrics Highlight:** Renders plain text or synced lyrics (`.lrc`, `.txt`, and embedded tags) with smooth vertical scrolling and live karaoke-style line highlighting matching current playback.
+* **Manual Scroll Recovery (Sync):** If you scroll away manually to read ahead, a floating "Sync" button appears; clicking it slides the viewport back to the playing lyric smoothly.
+* **In-App Offline Lyrics Editor:** Includes a full-height, code-styled editing dialog to write, paste, or format lyrics, saving directly back to disk or embedded tags.
+* **Slide-out Queue Side-Panel:** A reusable panel that slides out smoothly from the right in both the full Player Screen and the Main Window (triggered by the new 📋 Queue button). Both views stay in perfect synchronization.
+* **Drag-and-Drop Queue Reordering:** Rearrange tracks in the queue list using standard drag-and-drop rows, which immediately notifies and updates the playback engine's queue order.
+* **Full Queue Context Controls:** Right-click queue tracks to trigger "Play Now" or "Remove", use the `Delete` key to clear tracks, or wipe the entire queue via the flat "Clear Queue" button.
 
 ---
 

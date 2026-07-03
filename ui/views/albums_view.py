@@ -27,9 +27,8 @@ from ui.theme import THEMES, DEFAULT_THEME
 
 COL_ALBUM_NAME = 0
 COL_ALBUM_ARTISTS = 1
-COL_ALBUM_GENRE = 2
 COL_ALBUM_DURATION = 3
-COL_ALBUM_YEAR = 4
+COL_ALBUM_YEAR = 2
 
 
 class AlbumHoverDelegate(QStyledItemDelegate):
@@ -226,7 +225,7 @@ class AlbumHoverEventFilter(QObject):
 
 
 class _AlbumsTableModel(QAbstractTableModel):
-    COLUMNS = ["Album Name", "Artists", "Genre", "Duration", "Year"]
+    COLUMNS = ["Album Name", "Artists", "Duration", "Year"]
 
     def __init__(self, base_model: AlbumsListModel, parent=None):
         super().__init__(parent)
@@ -261,8 +260,6 @@ class _AlbumsTableModel(QAbstractTableModel):
                 return album.album_name
             if col == COL_ALBUM_ARTISTS:
                 return ", ".join(album.album_artists)
-            if col == COL_ALBUM_GENRE:
-                return ", ".join(album.genres) if album.genres else "—"
             if col == COL_ALBUM_DURATION:
                 return format_duration(album.total_duration)
             if col == COL_ALBUM_YEAR:
@@ -304,7 +301,6 @@ class AlbumsView(QWidget):
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_NAME, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_ARTISTS, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_GENRE, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_DURATION, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_YEAR, QHeaderView.ResizeMode.ResizeToContents)
         self.table.doubleClicked.connect(self._on_double_clicked)

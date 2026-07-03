@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QTabWidget, QTabBar,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTabBar,
     QMessageBox, QApplication,
 )
 
@@ -67,6 +67,11 @@ class MainWindow(QMainWindow):
         self.top_bar.search_clicked.connect(self._on_search_clicked)
         layout.addWidget(self.top_bar)
 
+        # --- Content Area (Tabs + Side Queue Panel) ---
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
         # --- Main Tabs ---
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
@@ -83,7 +88,25 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.genres_view, "Genres")
         self.tabs.addTab(self.albums_view, "Albums")
         self.tabs.addTab(self.playlists_view, "Playlists")
-        layout.addWidget(self.tabs, stretch=1)
+        content_layout.addWidget(self.tabs, stretch=1)
+
+        from ui.widgets.queue_panel import QueuePanel
+        self.main_queue_panel = QueuePanel(self.store, self.engine)
+        self.main_queue_panel.setMinimumWidth(0)
+        self.main_queue_panel.setMaximumWidth(0)
+        content_layout.addWidget(self.main_queue_panel)
+
+        layout.addLayout(content_layout, stretch=1)
+
+        from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
+        self._main_queue_active = False
+        self._main_queue_anim = QPropertyAnimation(self.main_queue_panel, b"maximumWidth")
+        self._main_queue_anim.setDuration(320)
+        self._main_queue_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._main_queue_anim.finished.connect(self._on_main_queue_anim_finished)
+
+        self.top_bar.queue_clicked.connect(self._toggle_main_queue)
+        self.main_queue_panel.close_requested.connect(self._toggle_main_queue)
 
         # Hide close buttons on permanent tabs (indices 0 to 4)
         tab_bar = self.tabs.tabBar()
@@ -168,6 +191,12 @@ class MainWindow(QMainWindow):
         self.player_screen.title_clicked.connect(self._on_bottom_bar_title_clicked)
         self.player_screen.artist_clicked.connect(self.open_artist_page)
 
+        # Queue panel navigation links
+        self.main_queue_panel.album_requested.connect(self.open_album_page)
+        self.main_queue_panel.artist_requested.connect(self.open_artist_page)
+        self.player_screen._queue_panel.album_requested.connect(self.open_album_page)
+        self.player_screen._queue_panel.artist_requested.connect(self.open_artist_page)
+
         # Keep Player Screen in sync with engine mode state
         self.engine.shuffle_changed.connect(self.player_screen.set_shuffle)
         self.engine.repeat_mode_changed.connect(self.player_screen.set_repeat_mode)
@@ -231,8 +260,10 @@ class MainWindow(QMainWindow):
         clear_icon_cache()
 
         # Push new colors to widgets that own SVG icons
+        self.top_bar.apply_theme(theme)
         self.bottom_bar.apply_theme(theme)
         self.player_screen.apply_theme(theme)
+        self.main_queue_panel.apply_theme(theme)
 
         # Tracks table danger color
         self.tracks_view.model.set_danger_color(theme["danger"])
@@ -442,6 +473,7 @@ class MainWindow(QMainWindow):
             ", ".join(self.store.get_track(track_path).artists)
             if self.store.get_track(track_path) else "",
             art,
+            track_path,
         )
 
     def _on_engine_playback_state_changed(self, state: str) -> None:
@@ -483,6 +515,28 @@ class MainWindow(QMainWindow):
     def _close_player_screen(self) -> None:
         self.player_screen.hide_player()
         self.setMinimumSize(_MIN_SIZE_NORMAL)
+
+    def _toggle_main_queue(self) -> None:
+        self._main_queue_active = not self._main_queue_active
+        target_w = int(self.width() * 0.35) if self._main_queue_active else 0
+        if self._main_queue_active:
+            self.main_queue_panel.refresh()
+        else:
+            self.main_queue_panel.setMinimumWidth(0)
+
+        self._main_queue_anim.stop()
+        self._main_queue_anim.setStartValue(self.main_queue_panel.maximumWidth())
+        self._main_queue_anim.setEndValue(target_w)
+        self._main_queue_anim.start()
+
+    def _on_main_queue_anim_finished(self) -> None:
+        if self._main_queue_active:
+            w = max(self.main_queue_panel._min_width, min(self.main_queue_panel.width(), self.main_queue_panel._max_width))
+            self.main_queue_panel.setMinimumWidth(w)
+            self.main_queue_panel.setMaximumWidth(w)
+        else:
+            self.main_queue_panel.setMinimumWidth(0)
+            self.main_queue_panel.setMaximumWidth(0)
 
     # ------------------------------------------------------------------
     # Navigation and Dynamic Pages
@@ -548,6 +602,7 @@ class MainWindow(QMainWindow):
         view = AlbumPageView(key, self.store, self.engine, self)
         view.track_double_clicked.connect(self._on_track_double_clicked)
         view.artist_requested.connect(self.open_artist_page)
+        view.genre_requested.connect(self.open_genre_page)
         view.play_all_requested.connect(self._on_play_all_requested)
 
         # Refresh dynamically when tracks change

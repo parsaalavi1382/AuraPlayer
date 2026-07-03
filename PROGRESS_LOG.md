@@ -12,8 +12,8 @@
 | Step 4 | ✅ Done | 2026-06-30 |
 | Step 5 | ✅ Done | 2026-07-01 |
 | Step 6 | ✅ Done | 2026-07-02 |
-| Step 7 | 🔜 Planned | - |
-| Step 8 | 🔜 Planned | - |
+| Step 7 | 🔄 In Progress | - |
+| Step 8 | ✅ Done | 2026-07-02 |
 | Step 9 | 🔜 Planned | - |
 | Step 10 | 🔜 Planned | - |
 
@@ -219,16 +219,23 @@
 - [Placeholder — create/rename/delete playlists, add/remove tracks,
   drag-and-drop reordering, cover image picker]
 
-### 🔜 Step 8: Queue Panel + Lyrics Panel
-**Status:** Planned
+### ✅ Step 8: Queue Panel + Lyrics Panel
+**Status:** Done
+**Date:** 2026-07-02
 **Deliverables:**
-- [Placeholder — queue panel UI (slide-in from the right, splitter-
-  style draggable left edge with min/max width clamps, "X" close
-  button), accessible from BOTH the Player Screen and a new 📋 Queue
-  button in the Main Menu top bar between Settings and Search — same
-  panel widget and queue data, two entry points — see
-  `FEATURE_BACKLOG.md` item #14; lyrics panel with the album-art-slides
-  -left animation and synced-lyrics support]
+- **High-Fidelity QueuePanel:** Created a slide-in side panel from the right that displays the active queue tracks. Shows Title, Artist, and Duration metadata from `LibraryStore` for all tracks.
+- **Dynamic Track Highlights:** Highlighted the currently playing track with an accent-colored play indicator ("▶") and bold text, syncing instantly with the playback engine.
+- **Queue Modification Context Menu:** Added a custom-styled, theme-aware right-click context menu offering "Play Now" and "Remove" actions, plus keyboard support for deleting rows via the `Delete` key.
+- **Automatic Drag & Drop Sync:** Implemented a custom `QueueListWidget` that supports drag-and-drop row reordering, automatically syncing the new order with the `PlaybackEngine.reorder_queue()` handler.
+- **Queue Close Controls & Drag Resizing:** Replaced the "Clear" button and "✕" with a flat "<" (less-than) symbol to slide-close the panel smoothly. Added mouse-drag horizontal resizing with strict min (260px) and max (450px) width clamps.
+- **Album Covers & Three Visual States in Queue:** Displays the track's album cover on the left side of each queue row (32x32 px with a 4px rounded border) with three dynamic visual states: State A (pulsing equalizer animation when playing), State B (play overlay when paused + hovered), and State C (static cover when paused).
+- **Themed, Fluid LyricsPanel:** Designed a premium scroll-centered lyrics display supporting external `.lrc`, `.txt`, and embedded audio tags (`USLT` for MP3, `LYRICS` for FLAC, `©lyr` for M4A/MP4).
+- **Lyrics Panel Centering:** Positioned the lyrics panel perfectly centered in the screen viewport, maintaining a small gap from the top bar and a small gap above the track details area.
+- **LRC Multi-Line Parsing Fix:** Fixed parser bug to group lines sharing identical timestamps, allowing multiple lines to display and highlight concurrently on screen.
+- **Smooth Auto-Scroll Karaoke Highlights:** Implemented high-contrast karaoke highlighting on the current line and zero-flicker, easing-curve vertical scrollbar animations to keep the active lyric line centered.
+- **Manual Scroll Recovery & Sync:** Created wheel and scroll track detectors: if a user scrolls away to read, an elegant floating "Sync" button slides in, instantly returning the viewport to the current line when clicked.
+- **Built-in Offline Lyrics Editor:** Constructed a `LyricsEditorDialog` with a full-height code-style layout. Users can write, paste, or format synchronized or unsynced lyrics, saving changes back to disk directly as `.lrc` or `.txt` next to the track.
+- **Album Tab Genre Hover & Navigation Fix:** Enabled proper underline hovers, hand cursor styling, and instant dynamic tab navigation for track genres displayed in the Album tab track table.
 
 ### 🔜 Step 9: Settings Polish + Search
 **Status:** Planned

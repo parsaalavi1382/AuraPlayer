@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel
 
 class TopBar(QFrame):
     settings_clicked = pyqtSignal()
+    queue_clicked = pyqtSignal()
     search_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -40,14 +41,28 @@ class TopBar(QFrame):
         layout.addWidget(title)
         layout.addStretch()
 
-        self.search_button = QPushButton("🔍")
+        self.search_button = QPushButton("")
         self.search_button.setObjectName("iconButton")
         self.search_button.setFixedSize(32, 32)
         self.search_button.clicked.connect(self.search_clicked.emit)
         layout.addWidget(self.search_button)
 
-        self.settings_button = QPushButton("⚙")
+        self.queue_button = QPushButton("")
+        self.queue_button.setObjectName("iconButton")
+        self.queue_button.setFixedSize(32, 32)
+        self.queue_button.clicked.connect(self.queue_clicked.emit)
+        layout.addWidget(self.queue_button)
+
+        self.settings_button = QPushButton("")
         self.settings_button.setObjectName("iconButton")
         self.settings_button.setFixedSize(32, 32)
         self.settings_button.clicked.connect(self.settings_clicked.emit)
         layout.addWidget(self.settings_button)
+
+    def apply_theme(self, theme: dict) -> None:
+        """Re-render SVG icons for the top bar with active theme colors."""
+        from ui.svg_icon import svg_icon
+        text_sec = theme.get("text_secondary", "#9AA0AC")
+        self.search_button.setIcon(svg_icon("search", text_sec, 18))
+        self.queue_button.setIcon(svg_icon("queue", text_sec, 18))
+        self.settings_button.setIcon(svg_icon("settings", text_sec, 18))

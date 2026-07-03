@@ -549,6 +549,15 @@ class PlaybackEngine(QObject):
                 self._queue_index = -1
                 self._set_active_source(None)
 
+    def clear_queue(self) -> None:
+        self._queue = []
+        self._original_queue = []
+        self._queue_index = -1
+        self.stop()
+        self._set_active_source(None)
+        self._persist_queue()
+        self.queue_changed.emit()
+
     def reorder_queue(self, new_order: list[str]) -> None:
         if sorted(new_order) != sorted(self._queue):
             raise ValueError("reorder_queue() received a different set of tracks.")
@@ -664,6 +673,10 @@ class PlaybackEngine(QObject):
         self._handoff_timer.stop()
         self._old_player_cleanup_timer.stop()
 
+        # Stop the old active player immediately to prevent overlapping audio!
+        self._active.stop()
+        self._active_output.setVolume(0.0)
+
         # Cleanly disconnect the old active player signals before swapping
         self._disconnect_signals(self._active)
 
@@ -671,7 +684,6 @@ class PlaybackEngine(QObject):
         self._standby_output.setVolume(self._volume)
 
         # Swap active and standby players and outputs.
-        # Note: the old active player keeps playing at its current volume for the brief overlap.
         self._active, self._standby = self._standby, self._active
         self._active_output, self._standby_output = self._standby_output, self._active_output
 
@@ -695,8 +707,8 @@ class PlaybackEngine(QObject):
             
         self._handoff_armed = True
         
-        # Schedule the clean-up (mute and stop) of the old active player (now self._standby) after a short overlap
-        self._old_player_cleanup_timer.start(250)
+        # Preload the next standby player
+        self._preload_standby()
 
     def _cleanup_old_player(self) -> None:
         self._standby_output.setVolume(0.0)
@@ -720,18 +732,6 @@ class PlaybackEngine(QObject):
             return
 
         duration_ms = self._active.duration()
-        if duration_ms > 0:
-            time_remaining = duration_ms - position_ms
-            
-            # Dynamic lookahead scheduling
-            next_index = self._compute_next_index(self._queue_index)
-            if next_index is not None and self._handoff_armed:
-                if time_remaining <= 1500:
-                    # Lead-time of 250ms handles the QMediaPlayer start/decode latency and overlap
-                    lead_time = 250
-                    target_delay = max(0, time_remaining - lead_time)
-                    self._handoff_timer.start(int(target_delay))
-
         self.position_changed.emit(position_ms / 1000.0, duration_ms / 1000.0)
 
     def _on_duration_changed(self, duration_ms: int) -> None:
@@ -751,7 +751,11 @@ class PlaybackEngine(QObject):
                 self._active.stop()
                 self._save_timer.stop()
             else:
-                self._play_queue_index(next_index)
+                # If standby is loaded and matching the next track, do a gapless handoff!
+                if self._standby.source() and not self._standby.source().isEmpty():
+                    self._perform_gapless_handoff()
+                else:
+                    self._play_queue_index(next_index)
 
     def _on_error(self, error, error_string: str) -> None:
         current_path = self.get_current_track_path() or "Unknown Track"

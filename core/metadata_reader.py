@@ -291,6 +291,8 @@ def _extract_raw_art_bytes(filepath: str) -> Optional[bytes]:
     return None
 
 
+_album_art_cache: dict[str, Optional[QPixmap]] = {}
+
 def get_album_art(filepath: str) -> Optional[QPixmap]:
     """
     Returns a square, rounded-corner QPixmap of the track's embedded
@@ -305,12 +307,17 @@ def get_album_art(filepath: str) -> Optional[QPixmap]:
     blurred-background extraction (FEATURE_BACKLOG.md item #16) that
     sample the pixmap directly.
     """
+    if filepath in _album_art_cache:
+        return _album_art_cache[filepath]
+
     raw_bytes = _extract_raw_art_bytes(filepath)
     if not raw_bytes:
+        _album_art_cache[filepath] = None
         return None
 
     source = QPixmap()
     if not source.loadFromData(raw_bytes):
+        _album_art_cache[filepath] = None
         return None
 
     scaled = source.scaled(
@@ -342,4 +349,5 @@ def get_album_art(filepath: str) -> Optional[QPixmap]:
     painter.drawPixmap(0, 0, scaled)
     painter.end()
 
+    _album_art_cache[filepath] = rounded
     return rounded

@@ -49,6 +49,8 @@ from PyQt6.QtWidgets import (
 from ui.svg_icon import svg_pixmap, svg_icon
 from ui.widgets.seek_bar import SeekBar
 from ui.widgets.clickable_label import ClickableLabel
+from ui.widgets.queue_panel import QueuePanel
+from ui.widgets.lyrics_panel import LyricsPanel
 
 # Animation durations in ms
 _SLIDE_MS = 320          # slide-up / slide-down
@@ -107,6 +109,9 @@ class PlayerScreen(QFrame):
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
+        self.store = parent.store
+        self.engine = parent.engine
+
         self.setObjectName("playerScreen")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -133,6 +138,9 @@ class PlayerScreen(QFrame):
 
         self._build_ui()
 
+        # Wire close signal for queue panel
+        self._queue_panel.close_requested.connect(self._on_queue_close_requested)
+
         # Slide animation (y from parent.height() → 0 to open, reverse to close)
         self._slide_anim = QPropertyAnimation(self, b"geometry")
         self._slide_anim.setDuration(_SLIDE_MS)
@@ -158,10 +166,14 @@ class PlayerScreen(QFrame):
         self._queue_anim = QPropertyAnimation(self._queue_panel, b"maximumWidth")
         self._queue_anim.setDuration(_FADE_MS)
         self._queue_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._queue_anim.finished.connect(self._on_queue_anim_finished)
 
         self._art_shift_anim = QPropertyAnimation(self._content_area, b"maximumWidth")
         self._art_shift_anim.setDuration(_FADE_MS)
         self._art_shift_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        # Listen to resize events of _content_area to keep _lyrics_panel positioned correctly
+        self._content_area.installEventFilter(self)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -180,13 +192,6 @@ class PlayerScreen(QFrame):
         self._back_btn.clicked.connect(self.back_clicked.emit)
         top_bar.addWidget(self._back_btn)
         top_bar.addStretch()
-
-        root.addLayout(top_bar)
-
-        # ── Horizontal content area: art/lyrics + optional queue ──────
-        h_split = QHBoxLayout()
-        h_split.setContentsMargins(0, 0, 0, 0)
-        h_split.setSpacing(0)
 
         # Art + lyrics stacked in the same space
         self._content_area = QWidget()
@@ -208,26 +213,37 @@ class PlayerScreen(QFrame):
         art_inner.addWidget(self._art_label)
         content_layout.addWidget(self._art_container, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Lyrics panel (absolute-positioned over art container, initially invisible)
-        self._lyrics_panel = _PlaceholderPanel(
-            "Lyrics panel coming in Step 8.\n"
-            "Synced .lrc files and embedded lyrics will appear here.",
+        # Lyrics panel (absolute-positioned over content area, initially invisible)
+        self._lyrics_panel = LyricsPanel(
+            self.store,
+            self.engine,
             parent=self._content_area,
         )
-        self._lyrics_panel.setGeometry(self._art_container.geometry())
-
-        h_split.addWidget(self._content_area, stretch=1)
+        self._lyrics_panel.setGeometry(self._content_area.rect().adjusted(24, 12, -24, -12))
 
         # Queue panel (starts at width=0, slides in from the right)
-        self._queue_panel = _PlaceholderPanel(
-            "Queue panel coming in Step 8.\n"
-            "Your playback queue will appear here.",
+        self._queue_panel = QueuePanel(
+            self.store,
+            self.engine,
         )
         self._queue_panel.setMinimumWidth(0)
         self._queue_panel.setMaximumWidth(0)
-        h_split.addWidget(self._queue_panel)
 
-        root.addLayout(h_split, stretch=1)
+        # Left area groups the top bar and content area (art/lyrics)
+        left_area = QVBoxLayout()
+        left_area.setContentsMargins(0, 0, 0, 0)
+        left_area.setSpacing(0)
+        left_area.addLayout(top_bar)
+        left_area.addWidget(self._content_area, stretch=1)
+
+        # Top half groups left area and queue panel horizontally so queue panel spans full height
+        top_half = QHBoxLayout()
+        top_half.setContentsMargins(0, 0, 0, 0)
+        top_half.setSpacing(0)
+        top_half.addLayout(left_area, stretch=1)
+        top_half.addWidget(self._queue_panel)
+
+        root.addLayout(top_half, stretch=1)
 
         # ── Track info ────────────────────────────────────────────────
         info_area = QVBoxLayout()
@@ -412,6 +428,10 @@ class PlayerScreen(QFrame):
     def _on_repeat_clicked(self) -> None:
         self.repeat_clicked.emit()
 
+    def _on_queue_close_requested(self) -> None:
+        self._queue_btn.setChecked(False)
+        self._on_queue_clicked()
+
     def _on_lyrics_clicked(self) -> None:
         self._lyrics_active = self._lyrics_btn.isChecked()
         self._update_lyrics_state()
@@ -497,6 +517,15 @@ class PlayerScreen(QFrame):
     # Lyrics / Queue panel animation
     # ------------------------------------------------------------------
 
+    def _on_queue_anim_finished(self) -> None:
+        if self._queue_active:
+            w = max(self._queue_panel._min_width, min(self._queue_panel.width(), self._queue_panel._max_width))
+            self._queue_panel.setMinimumWidth(w)
+            self._queue_panel.setMaximumWidth(w)
+        else:
+            self._queue_panel.setMinimumWidth(0)
+            self._queue_panel.setMaximumWidth(0)
+
     def _update_lyrics_state(self) -> None:
         """Fade art ↔ lyrics based on _lyrics_active."""
         if self._lyrics_active:
@@ -506,7 +535,8 @@ class PlayerScreen(QFrame):
             self._art_fade.setEndValue(0.0)
             self._art_fade.start()
             # Fade lyrics in
-            self._lyrics_panel.setGeometry(self._art_container.rect())
+            rect = self._content_area.rect()
+            self._lyrics_panel.setGeometry(rect.adjusted(24, 12, -24, -12))
             self._lyrics_panel.raise_()
             self._lyrics_panel.show()
             self._lyrics_fade.stop()
@@ -528,6 +558,10 @@ class PlayerScreen(QFrame):
     def _update_queue_state(self) -> None:
         """Slide the queue panel in/out from the right."""
         target_w = int(self.width() * 0.40) if self._queue_active else 0
+        if self._queue_active:
+            self._queue_panel.refresh()
+        else:
+            self._queue_panel.setMinimumWidth(0)
 
         self._queue_anim.stop()
         self._queue_anim.setStartValue(self._queue_panel.maximumWidth())
@@ -587,7 +621,8 @@ class PlayerScreen(QFrame):
                 
         self.artist_layout.addStretch()
 
-    def set_track(self, title: str, artists: str, art: "QPixmap | None") -> None:
+    def set_track(self, title: str, artists: str, art: "QPixmap | None", path: str | None = None) -> None:
+        self._current_path = path
         self._title_label.setText(title)
         self._populate_artists(artists)
         if art and not art.isNull():
@@ -595,6 +630,9 @@ class PlayerScreen(QFrame):
         else:
             self._art_label.setPixmap(QPixmap())
             self._art_label.setText("♪")
+
+        # Load lyrics on track change
+        self._lyrics_panel.load_track_lyrics(path or "")
 
     def set_playing(self, is_playing: bool) -> None:
         self._is_playing = is_playing
@@ -704,6 +742,12 @@ class PlayerScreen(QFrame):
         # Update volume icon
         self._update_volume_icon()
 
+        # Apply theme to lyrics and queue panels
+        if hasattr(self, "_lyrics_panel"):
+            self._lyrics_panel.apply_theme(theme)
+        if hasattr(self, "_queue_panel"):
+            self._queue_panel.apply_theme(theme)
+
     # ------------------------------------------------------------------
     # Slide animation
     # ------------------------------------------------------------------
@@ -745,10 +789,19 @@ class PlayerScreen(QFrame):
             pass
 
     def resizeEvent(self, event) -> None:
-        """Keep the lyrics panel geometry in sync with the art container."""
+        """Keep the lyrics panel geometry in sync with the content area."""
         super().resizeEvent(event)
-        if hasattr(self, "_lyrics_panel") and hasattr(self, "_art_container"):
-            self._lyrics_panel.setGeometry(self._art_container.geometry())
+        if hasattr(self, "_lyrics_panel") and hasattr(self, "_content_area"):
+            rect = self._content_area.rect()
+            self._lyrics_panel.setGeometry(rect.adjusted(24, 12, -24, -12))
+
+    def eventFilter(self, watched, event) -> bool:
+        from PyQt6.QtCore import QEvent
+        if watched == getattr(self, "_content_area", None) and event.type() == QEvent.Type.Resize:
+            if hasattr(self, "_lyrics_panel"):
+                rect = self._content_area.rect()
+                self._lyrics_panel.setGeometry(rect.adjusted(24, 12, -24, -12))
+        return super().eventFilter(watched, event)
 
     def parentResized(self, new_size: "QSize") -> None:
         """Called by MainWindow.resizeEvent so the overlay always fills
