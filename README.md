@@ -16,7 +16,7 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ## ⚠️ Project Status: In Development
 
-A pre-release version of AuraPlayer is now available at **[Download Pre-release EXE](ADD_YOUR_RELEASE_DOWNLOAD_LINK_HERE)**. 
+A pre-release version of AuraPlayer is now available at **[Download Pre-release EXE](https://github.com/parsaalavi1382/AuraPlayer/releases/download/v1.0.0-beta/AuraPlayer_Setup_v1.0.0.exe)**. 
 
 Please note that this project is **currently in progress and is not yet fully completed**, so it may contain some bugs or unpolished corners. Core features like playback, gapless audio, library scanning, metadata editing, lyric sync, and dynamic theme transitions are fully functional.
 
