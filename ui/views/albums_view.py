@@ -24,6 +24,7 @@ from ui.models.library_group_models import AlbumsListModel
 from ui.models.tracks_table_model import format_duration
 from ui.widgets.empty_state import EmptyStateWidget
 from ui.theme import THEMES, DEFAULT_THEME
+from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 
 COL_ALBUM_NAME = 0
 COL_ALBUM_ARTISTS = 1
@@ -100,10 +101,10 @@ class AlbumHoverDelegate(QStyledItemDelegate):
                 )
                 painter.drawPixmap(cover_rect, scaled)
             else:
-                # Draw placeholder 💿
+                # Draw placeholder ♪
                 painter.save()
                 painter.setFont(QFont("Segoe UI", 14))
-                painter.drawText(cover_rect, Qt.AlignmentFlag.AlignCenter, "💿")
+                painter.drawText(cover_rect, Qt.AlignmentFlag.AlignCenter, "♪")
                 painter.restore()
 
             # Draw album name text on the right of the cover art
@@ -225,13 +226,15 @@ class AlbumHoverEventFilter(QObject):
 
 
 class _AlbumsTableModel(QAbstractTableModel):
-    COLUMNS = ["Album Name", "Artists", "Duration", "Year"]
+    COLUMNS = ["Album Name", "Artists", "Year", "Duration"]
 
     def __init__(self, base_model: AlbumsListModel, parent=None):
         super().__init__(parent)
         self.base_model = base_model
         self.base_model.modelReset.connect(self._on_reset)
         self.base_model.layoutChanged.connect(self._on_reset)
+        self._sort_column = 0
+        self._sort_ascending = True
 
     def _on_reset(self):
         self.beginResetModel()
@@ -243,9 +246,19 @@ class _AlbumsTableModel(QAbstractTableModel):
     def columnCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.COLUMNS)
 
+    def sort_by_column(self, column: int, ascending: bool = True) -> None:
+        self._sort_column = column
+        self._sort_ascending = ascending
+        self.base_model.sort_by_column(column, ascending)
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.COLUMNS) - 1)
+
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return self.COLUMNS[section]
+            base_header = self.COLUMNS[section]
+            if section == self._sort_column:
+                arrow = "↑" if self._sort_ascending else "↓"
+                return f"{arrow} {base_header}"
+            return base_header
         return None
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -298,11 +311,15 @@ class AlbumsView(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(40)
-        self.table.setShowGrid(False)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_NAME, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_ARTISTS, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_DURATION, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM_YEAR, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setShowGrid(True)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.setColumnWidth(COL_ALBUM_NAME, 250)
+        self.table.setColumnWidth(COL_ALBUM_ARTISTS, 250)
+        self.table.setColumnWidth(COL_ALBUM_YEAR, 80)
+        self.table.setColumnWidth(COL_ALBUM_DURATION, 100)
+        self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader())
+        self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_double_clicked)
 
         self.delegate = AlbumHoverDelegate(self.table, self)
@@ -326,10 +343,20 @@ class AlbumsView(QWidget):
             return
         self.stack.setCurrentWidget(self.table)
         self.base_model.set_tracks(tracks)
-        self.base_model.sort_alphabetical()
+        
+        sort_col = getattr(self.table_model, "_sort_column", COL_ALBUM_NAME)
+        sort_asc = getattr(self.table_model, "_sort_ascending", True)
+        self.table_model.sort_by_column(sort_col, sort_asc)
 
     def _on_tracks_changed(self, *_args) -> None:
         self.refresh()
+
+    def _on_header_clicked(self, index: int) -> None:
+        if self.table_model._sort_column == index:
+            new_asc = not self.table_model._sort_ascending
+        else:
+            new_asc = True
+        self.table_model.sort_by_column(index, new_asc)
 
     def _on_double_clicked(self, index) -> None:
         album = self.base_model.album_at(index.row())

@@ -23,17 +23,29 @@ from mutagen.mp4 import MP4
 
 
 def parse_line_syllables(text: str, default_start_time: float) -> tuple[str, list[dict] | None]:
-    tag_pattern = re.compile(r'<(\d+):(\d+(?:\.\d+)?)[>]?>')
+    """
+    Parses enhanced LRC syllable-by-syllable timing tags within a single line.
+    Handles unexpected spacing, empty silence tags, and ensures proper word spacing.
+    """
+    # Regex pattern to match word/syllable time tags like <00:03.48> or < 00:03.48 >
+    tag_pattern = re.compile(r'<\s*(\d+)\s*:\s*(\d+(?:\.\d+)?)\s*>')
+    
+    # Normalize multiple spaces/tabs into a single standard space
+    text = re.sub(r'[ \t]+', ' ', text).strip()
+    
     matches = list(tag_pattern.finditer(text))
     if not matches:
         return text, None
 
     syllables = []
+    
+    # Extract any text before the very first time tag (if applicable)
     if matches[0].start() > 0:
-        pre_text = text[0:matches[0].start()]
-        if pre_text.strip():
+        pre_text = text[0:matches[0].start()].strip()
+        if pre_text:
             syllables.append({"text": pre_text, "time": default_start_time})
 
+    # Process each time tag and its associated syllable text
     for idx, match in enumerate(matches):
         try:
             minutes = int(match.group(1))
@@ -44,17 +56,38 @@ def parse_line_syllables(text: str, default_start_time: float) -> tuple[str, lis
 
         start_idx = match.end()
         end_idx = matches[idx+1].start() if idx + 1 < len(matches) else len(text)
-        s_text = text[start_idx:end_idx]
+        
+        s_text = text[start_idx:end_idx].strip()
+        
+        # Skip empty duration tags (e.g., consecutive tags indicating silence/pauses)
+        # to prevent corrupting the lyric parsing pipeline
+        if not s_text and idx + 1 < len(matches):
+            continue
+            
         syllables.append({"text": s_text, "time": total_seconds})
 
+    # Generate clean text for layout rendering by stripping all enhanced time tags
     clean_text = tag_pattern.sub('', text)
+    clean_text = re.sub(r'[ \t]+', ' ', clean_text).strip()
+    
+    # Append a trailing space to each syllable (except the last one)
+    # This prevents words from gluing together during custom QPainter text processing
+    for idx, s in enumerate(syllables):
+        if idx < len(syllables) - 1 and not s["text"].endswith(' '):
+            s["text"] += ' '
+
     return clean_text, syllables
 
 
 def parse_lrc(lrc_text: str) -> list[tuple[float, str, list[dict] | None]]:
+    """
+    Parses standard and enhanced LRC files, grouping lines by timestamps
+    and routing them to the syllable parsing pipeline.
+    """
     lines = lrc_text.splitlines()
     raw_lyrics = []
-    pattern = re.compile(r'\[(\d+):(\d+(?:\.\d+)?)]')
+    # Regex pattern to match line timestamps like [00:12.34]
+    pattern = re.compile(r'\[\s*(\d+)\s*:\s*(\d+(?:\.\d+)?)\s*\]')
 
     for line in lines:
         line = line.strip()
@@ -64,6 +97,7 @@ def parse_lrc(lrc_text: str) -> list[tuple[float, str, list[dict] | None]]:
         if not matches:
             continue
 
+        # Extract lyric text after the last timestamp on the current line
         last_match_end = matches[-1].end()
         text = line[last_match_end:].strip()
 
@@ -76,6 +110,7 @@ def parse_lrc(lrc_text: str) -> list[tuple[float, str, list[dict] | None]]:
             except (ValueError, TypeError):
                 continue
 
+    # Group duplicate timestamps (common in tracks with repetitive or layered lyrics)
     grouped = {}
     for ts, text in raw_lyrics:
         key = round(ts, 2)
@@ -83,6 +118,7 @@ def parse_lrc(lrc_text: str) -> list[tuple[float, str, list[dict] | None]]:
             grouped[key] = []
         grouped[key].append(text)
 
+    # Sort grouped timestamps and extract enhanced syllable data
     lyrics = []
     for ts in sorted(grouped.keys()):
         merged_text = "\n".join(grouped[ts])
@@ -146,15 +182,40 @@ class LyricLabel(QLabel):
         self.setText(self.raw_text)
         self.update_appearance(0.0)
 
+    def _is_mouse_over_text(self, pos) -> bool:
+        """
+        Calculates the exact visual bounding box of the text 
+        and checks if the mouse cursor is strictly inside it.
+        """
+        # Get total text width and label dimensions
+        text_width = self.fontMetrics().horizontalAdvance(self.raw_text)
+        text_height = self.fontMetrics().height()
+        
+        # Calculate horizontal starting position based on Center Alignment
+        x_start = (self.width() - text_width) // 2
+        x_end = x_start + text_width
+        
+        # Calculate vertical starting position based on Center Alignment
+        y_start = (self.height() - text_height) // 2
+        y_end = y_start + text_height
+        
+        # Validate if mouse coordinates fall inside the text boundaries
+        return x_start <= pos.x() <= x_end and y_start <= pos.y() <= y_end
+
     def mouseMoveEvent(self, event) -> None:
         if not self.is_synced:
             super().mouseMoveEvent(event)
             return
 
-        if not self.hovered:
-            self.hovered = True
-            self.update_appearance(self._current_position)
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Trigger hover styling only if mouse is strictly over the text characters
+        if self._is_mouse_over_text(event.position()):
+            if not self.hovered:
+                self.hovered = True
+                self.update_appearance(self._current_position)
+        else:
+            if self.hovered:
+                self.hovered = False
+                self.update_appearance(self._current_position)
         
         super().mouseMoveEvent(event)
 
@@ -163,10 +224,10 @@ class LyricLabel(QLabel):
             super().leaveEvent(event)
             return
         
+        # Reset hover state when mouse completely exits the widget area
         if self.hovered:
             self.hovered = False
             self.update_appearance(self._current_position)
-            self.setCursor(Qt.CursorShape.ArrowCursor)
         
         super().leaveEvent(event)
 
@@ -175,10 +236,12 @@ class LyricLabel(QLabel):
             super().mousePressEvent(event)
             return
         
+        # Allow clicking/seeking only if the click is made directly on the text
         if event.button() == Qt.MouseButton.LeftButton:
-            self.seek_requested.emit(self.timestamp)
-            event.accept()
-            return
+            if self._is_mouse_over_text(event.position()):
+                self.seek_requested.emit(self.timestamp)
+                event.accept()
+                return
         
         super().mousePressEvent(event)
 

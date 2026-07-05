@@ -105,7 +105,6 @@ class MainWindow(QMainWindow):
         self._main_queue_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
         self._main_queue_anim.finished.connect(self._on_main_queue_anim_finished)
 
-        self.top_bar.queue_clicked.connect(self._toggle_main_queue)
         self.main_queue_panel.close_requested.connect(self._toggle_main_queue)
 
         # Hide close buttons on permanent tabs (indices 0 to 4)
@@ -119,10 +118,12 @@ class MainWindow(QMainWindow):
         self.bottom_bar = BottomBar()
         layout.addWidget(self.bottom_bar)
 
+        self.bottom_bar.queue_clicked.connect(self._toggle_main_queue)
+
         # --- Player Screen Overlay (child of MainWindow, not central) ---
         self.player_screen = PlayerScreen(self)
 
-        # --- Volume & Output Device Controls (wired to PlayerScreen) ---
+        # --- Volume & Output Device Controls (wired to PlayerScreen & BottomBar) ---
         self.player_screen.set_volume(self.engine.get_volume())
         self.player_screen.set_available_devices(
             self.engine.list_output_devices(), self.engine.current_output_device()
@@ -130,6 +131,14 @@ class MainWindow(QMainWindow):
         self.player_screen.volume_changed.connect(self.engine.set_volume)
         self.player_screen.output_device_selected.connect(self.engine.set_output_device)
         self.engine.volume_changed.connect(self.player_screen.set_volume)
+
+        self.bottom_bar.set_volume(self.engine.get_volume())
+        self.bottom_bar.set_available_devices(
+            self.engine.list_output_devices(), self.engine.current_output_device()
+        )
+        self.bottom_bar.volume_changed.connect(self.engine.set_volume)
+        self.bottom_bar.output_device_selected.connect(self.engine.set_output_device)
+        self.engine.volume_changed.connect(self.bottom_bar.set_volume)
 
         # Monitor device updates to keep headphone menu fresh
         from PyQt6.QtMultimedia import QMediaDevices
@@ -172,6 +181,12 @@ class MainWindow(QMainWindow):
         self.bottom_bar.bar_clicked.connect(self._open_player_screen)
         self.bottom_bar.title_clicked.connect(self._on_bottom_bar_title_clicked)
         self.bottom_bar.artist_clicked.connect(self.open_artist_page)
+        self.bottom_bar.shuffle_clicked.connect(
+            lambda: self.engine.set_shuffle(not self.engine.get_shuffle())
+        )
+        self.bottom_bar.repeat_clicked.connect(self._cycle_repeat_mode)
+        self.bottom_bar.lyric_clicked.connect(self._on_bottom_bar_lyric_clicked)
+        self.bottom_bar.seek_requested.connect(self.engine.seek)
 
         # --- Player Screen wiring ---
         self.player_screen.back_clicked.connect(self._close_player_screen)
@@ -197,9 +212,17 @@ class MainWindow(QMainWindow):
         self.player_screen._queue_panel.album_requested.connect(self.open_album_page)
         self.player_screen._queue_panel.artist_requested.connect(self.open_artist_page)
 
-        # Keep Player Screen in sync with engine mode state
+        # Keep Player Screen and Bottom Bar in sync with engine mode state
         self.engine.shuffle_changed.connect(self.player_screen.set_shuffle)
         self.engine.repeat_mode_changed.connect(self.player_screen.set_repeat_mode)
+        self.engine.shuffle_changed.connect(self.bottom_bar.set_shuffle)
+        self.engine.repeat_mode_changed.connect(self.bottom_bar.set_repeat_mode)
+
+        # Initialize button states to match engine
+        self.player_screen.set_shuffle(self.engine.get_shuffle())
+        self.player_screen.set_repeat_mode(self.engine.get_repeat_mode())
+        self.bottom_bar.set_shuffle(self.engine.get_shuffle())
+        self.bottom_bar.set_repeat_mode(self.engine.get_repeat_mode())
 
         # --- TracksView play signals ---
         self.tracks_view.track_double_clicked.connect(self._on_track_double_clicked)
@@ -494,9 +517,10 @@ class MainWindow(QMainWindow):
         )
 
     def _on_audio_devices_changed(self) -> None:
-        self.player_screen.set_available_devices(
-            self.engine.list_output_devices(), self.engine.current_output_device()
-        )
+        devices = self.engine.list_output_devices()
+        current = self.engine.current_output_device()
+        self.player_screen.set_available_devices(devices, current)
+        self.bottom_bar.set_available_devices(devices, current)
 
     # ------------------------------------------------------------------
     # Player Screen open / close
@@ -518,6 +542,7 @@ class MainWindow(QMainWindow):
 
     def _toggle_main_queue(self) -> None:
         self._main_queue_active = not self._main_queue_active
+        self.bottom_bar.set_queue_active(self._main_queue_active)
         target_w = int(self.width() * 0.35) if self._main_queue_active else 0
         if self._main_queue_active:
             self.main_queue_panel.refresh()
@@ -559,6 +584,10 @@ class MainWindow(QMainWindow):
         if track:
             self._close_player_screen()
             self.open_album_page(track.album_key)
+
+    def _on_bottom_bar_lyric_clicked(self) -> None:
+        self._open_player_screen()
+        self.player_screen.set_lyrics_active(True)
 
     def open_artist_page(self, name: str) -> None:
         self._close_player_screen()

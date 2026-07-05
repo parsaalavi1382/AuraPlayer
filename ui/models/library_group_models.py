@@ -118,8 +118,23 @@ class AlbumsListModel(QAbstractListModel):
         return None
 
     def sort_alphabetical(self) -> None:
+        self.sort_by_column(0, True)
+
+    def sort_by_column(self, column: int, ascending: bool = True) -> None:
         self.layoutAboutToBeChanged.emit()
-        self._albums.sort(key=lambda a: a.album_name.lower())
+        if column == 0:
+            self._albums.sort(key=lambda a: (a.album_name or "").lower(), reverse=not ascending)
+        elif column == 1:
+            self._albums.sort(key=lambda a: ", ".join(a.album_artists).lower(), reverse=not ascending)
+        elif column == 2:
+            def year_key(a):
+                try:
+                    return int(a.year)
+                except (ValueError, TypeError):
+                    return 0
+            self._albums.sort(key=year_key, reverse=not ascending)
+        elif column == 3:
+            self._albums.sort(key=lambda a: a.total_duration, reverse=not ascending)
         self.layoutChanged.emit()
 
 
@@ -152,6 +167,12 @@ class ArtistsListModel(QAbstractListModel):
         return None
 
     def sort_alphabetical(self) -> None:
+        self.sort_by_column(0, True)
+
+    def sort_by_column(self, column: int, ascending: bool = True) -> None:
         self.layoutAboutToBeChanged.emit()
-        self._artists.sort(key=lambda a: a.name.lower())
+        if column == 0:
+            self._artists.sort(key=lambda a: (a.name or "").lower(), reverse=not ascending)
+        elif column == 1:
+            self._artists.sort(key=lambda a: a.track_count, reverse=not ascending)
         self.layoutChanged.emit()

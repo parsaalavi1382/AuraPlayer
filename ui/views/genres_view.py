@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 
 from core.library_store import LibraryStore
 from ui.widgets.empty_state import EmptyStateWidget
+from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 
 
 class _GenresTableModel(QAbstractTableModel):
@@ -20,6 +21,8 @@ class _GenresTableModel(QAbstractTableModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._genres: list[tuple[str, int]] = []
+        self._sort_column = 0
+        self._sort_ascending = True
 
     def set_genres(self, genres: list[tuple[str, int]]) -> None:
         self.beginResetModel()
@@ -37,9 +40,24 @@ class _GenresTableModel(QAbstractTableModel):
     def columnCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else 2
 
+    def sort_by_column(self, column: int, ascending: bool = True) -> None:
+        self.layoutAboutToBeChanged.emit()
+        self._sort_column = column
+        self._sort_ascending = ascending
+        if column == 0:
+            self._genres.sort(key=lambda x: x[0].lower(), reverse=not ascending)
+        elif column == 1:
+            self._genres.sort(key=lambda x: x[1], reverse=not ascending)
+        self.layoutChanged.emit()
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, 1)
+
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return ["Genre", "Tracks"][section]
+            base_header = ["Genre", "Tracks"][section]
+            if section == self._sort_column:
+                arrow = "↑" if self._sort_ascending else "↓"
+                return f"{arrow} {base_header}"
+            return base_header
         return None
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -80,9 +98,13 @@ class GenresView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.setShowGrid(False)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setShowGrid(True)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.setColumnWidth(0, 450)
+        self.table.setColumnWidth(1, 100)
+        self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader())
+        self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_double_clicked)
         self.stack.addWidget(self.table)
 
@@ -113,9 +135,20 @@ class GenresView(QWidget):
 
         sorted_genres = sorted(counts.items(), key=lambda x: x[0].lower())
         self.table_model.set_genres(sorted_genres)
+        
+        sort_col = getattr(self.table_model, "_sort_column", 0)
+        sort_asc = getattr(self.table_model, "_sort_ascending", True)
+        self.table_model.sort_by_column(sort_col, sort_asc)
 
     def _on_tracks_changed(self, *_args) -> None:
         self.refresh()
+
+    def _on_header_clicked(self, index: int) -> None:
+        if self.table_model._sort_column == index:
+            new_asc = not self.table_model._sort_ascending
+        else:
+            new_asc = True
+        self.table_model.sort_by_column(index, new_asc)
 
     def _on_double_clicked(self, index) -> None:
         genre_info = self.table_model.genre_at(index.row())

@@ -64,7 +64,7 @@ class QueueListWidget(QListWidget):
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
 
 
@@ -91,6 +91,10 @@ class QueueListWidget(QListWidget):
 
 
 class QueueCoverLabel(QWidget):
+
+    clicked = pyqtSignal()
+
+
 
     def __init__(self, track_path: str, is_active: bool, is_playing: bool, theme_colors: dict, has_embedded_art: bool = True, parent_widget=None):
 
@@ -288,13 +292,48 @@ class QueueCoverLabel(QWidget):
 
 
 
+    def mousePressEvent(self, event):
+
+        if event.button() == Qt.MouseButton.LeftButton:
+
+            self.clicked.emit()
+
+            event.accept()
+
+        else:
+
+            super().mousePressEvent(event)
+
+
+
 
 
 class QueueHoverLabel(QLabel):
+    """
+    Hover-underline label used for both the queue row's title and each
+    individual artist name.
+
+    Bugfix (2026-07-03): artist names sit packed tightly, side-by-side,
+    in a zero-spacing/zero-margin row. With the previous `Maximum`
+    size policy, Qt was not guaranteed to size each label to exactly
+    its own text -- in that tightly packed context, adjacent labels'
+    actual hit-boxes could overlap or leave dead gaps between them, so
+    hovering over one artist's text often didn't land inside that
+    label's true geometry, and enterEvent/leaveEvent fired unreliably
+    (or not at all). The title label never hit this because it's alone
+    on its own row with nothing crowding it, which is why "title hover
+    works, artist hover doesn't" despite both using this same class.
+
+    Fix: give the label a `Fixed` size policy and an explicit
+    `setFixedWidth()` computed from its own font metrics, so its
+    hit-box is pixel-exact to its visible text -- no shared boundaries
+    with neighboring labels, no dead zones. `setMouseTracking` +
+    `WA_Hover` are set defensively on top of that. The actual hover
+    effect is unchanged: underline via `QFont.setUnderline()` only, no
+    background/rectangle, no row highlight.
+    """
 
     clicked = pyqtSignal()
-
-
 
     def __init__(self, text: str, is_active: bool, theme_colors: dict, is_bold: bool = False, font_size: int = 9, parent=None):
 
@@ -310,11 +349,24 @@ class QueueHoverLabel(QLabel):
 
         self.is_hovered = False
 
-        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        # Defensive: enterEvent/leaveEvent don't strictly require mouse
+        # tracking, but enabling it plus WA_Hover removes any ambiguity
+        # about whether this specific small widget receives hover
+        # notifications reliably while embedded inside a QListWidget
+        # item widget.
+        self.setMouseTracking(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+        # Fixed (not Maximum) so this label's box is pixel-exact to its
+        # text -- see class docstring above for why this matters here.
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
         self._update_style()
 
-   
+    def _resize_to_text(self) -> None:
+        fm = self.fontMetrics()
+        width = fm.horizontalAdvance(self.text())
+        self.setFixedWidth(max(width, 1))
 
     def _update_style(self):
 
@@ -339,16 +391,19 @@ class QueueHoverLabel(QLabel):
        
 
         font = QFont("Segoe UI", self.font_size)
-
         font.setBold(self.is_bold or self.is_active)
-
         font.setUnderline(self.is_hovered)
-
         self.setFont(font)
 
-       
+        self.setStyleSheet(f"""
+            color: {color};
+            background-color: transparent;
+            border: none;
+            padding: 0px;
+            margin: 0px;
+        """)
 
-        self.setStyleSheet(f"color: {color}; background-color: transparent; border: none; padding: 0px; margin: 0px;")
+        self._resize_to_text()
 
        
 
@@ -400,6 +455,8 @@ class QueueItemWidget(QWidget):
 
     artist_requested = pyqtSignal(str)
 
+    cover_clicked = pyqtSignal()
+
 
 
     def __init__(self, track_path: str, title: str, artist: str, album_key: str, first_artist: str, is_active: bool, is_playing: bool, theme_colors: dict, has_embedded_art: bool = True, parent=None):
@@ -425,6 +482,8 @@ class QueueItemWidget(QWidget):
         # Album cover on the left with three states
 
         self.cover_lbl = QueueCoverLabel(track_path, is_active, is_playing, theme_colors, has_embedded_art, self)
+
+        self.cover_lbl.clicked.connect(self.cover_clicked.emit)
 
         layout.addWidget(self.cover_lbl)
 
@@ -487,6 +546,8 @@ class QueueItemWidget(QWidget):
                 text_secondary = theme_colors.get("text_secondary", "#9AA0AC")
 
                 sep_lbl.setStyleSheet(f"color: {text_secondary};")
+
+                sep_lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
                 artists_layout.addWidget(sep_lbl)
 
@@ -650,6 +711,8 @@ class QueuePanel(QFrame):
 
         self.engine.playback_state_changed.connect(self.refresh)
 
+        self.engine.shuffle_changed.connect(self.refresh)
+
 
 
     def apply_theme(self, theme_colors: dict) -> None:
@@ -732,14 +795,6 @@ class QueuePanel(QFrame):
 
     def refresh(self) -> None:
 
-        # Prevent updates when widget not visible
-
-        if not self.isVisible():
-
-            return
-
-
-
         self.list_widget.blockSignals(True)
 
         self.list_widget.clear()
@@ -802,6 +857,8 @@ class QueuePanel(QFrame):
 
             widget.artist_requested.connect(self.artist_requested.emit)
 
+            widget.cover_clicked.connect(lambda r=i: self._on_cover_clicked(r))
+
             item.setSizeHint(widget.sizeHint())
 
             self.list_widget.setItemWidget(item, widget)
@@ -848,6 +905,8 @@ class QueuePanel(QFrame):
 
         self._update_animation_timer()
 
+        self.refresh()
+
 
 
     def hideEvent(self, event) -> None:
@@ -873,6 +932,12 @@ class QueuePanel(QFrame):
     def _on_item_double_clicked(self, index) -> None:
 
         row = index.row()
+
+        self.engine._play_queue_index(row)
+
+
+
+    def _on_cover_clicked(self, row: int) -> None:
 
         self.engine._play_queue_index(row)
 
@@ -1056,5 +1121,4 @@ class QueuePanel(QFrame):
 
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
-        super().leaveEvent(event) 
-
+        super().leaveEvent(event)

@@ -276,34 +276,33 @@ class PlayerScreen(QFrame):
         # ── Transport controls ────────────────────────────────────────
         transport = QHBoxLayout()
         transport.setContentsMargins(16, 8, 16, 8)
-        transport.setSpacing(0)
+        transport.setSpacing(8)
+        transport.addStretch()
 
         self._shuffle_btn = self._icon_btn("shuffle", size=_ICON_SIZE)
         self._shuffle_btn.setCheckable(True)
         self._shuffle_btn.clicked.connect(self._on_shuffle_clicked)
         transport.addWidget(self._shuffle_btn)
-        transport.addStretch()
 
         self._prev_btn = self._icon_btn("prev", size=_ICON_SIZE)
         self._prev_btn.pressed.connect(self._on_prev_pressed)
         self._prev_btn.released.connect(self._on_prev_released)
         transport.addWidget(self._prev_btn)
-        transport.addSpacing(8)
 
         self._play_pause_btn = self._icon_btn("play", size=_ICON_SIZE_MAIN)
         self._play_pause_btn.clicked.connect(self.play_pause_clicked.emit)
         transport.addWidget(self._play_pause_btn)
-        transport.addSpacing(8)
 
         self._next_btn = self._icon_btn("next", size=_ICON_SIZE)
         self._next_btn.pressed.connect(self._on_next_pressed)
         self._next_btn.released.connect(self._on_next_released)
         transport.addWidget(self._next_btn)
-        transport.addStretch()
 
         self._repeat_btn = self._icon_btn("repeat", size=_ICON_SIZE)
         self._repeat_btn.clicked.connect(self._on_repeat_clicked)
         transport.addWidget(self._repeat_btn)
+
+        transport.addStretch()
 
         root.addLayout(transport)
 
@@ -652,6 +651,12 @@ class PlayerScreen(QFrame):
     def set_repeat_mode(self, mode: str) -> None:
         self._repeat_mode = mode
         self._refresh_mode_icons()
+
+    def set_lyrics_active(self, active: bool) -> None:
+        self._lyrics_active = active
+        self._lyrics_btn.setChecked(active)
+        self._update_lyrics_state()
+        self._update_toggle_styles()
 
     def set_volume(self, volume: float) -> None:
         self._volume = volume

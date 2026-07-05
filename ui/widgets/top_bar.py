@@ -47,12 +47,6 @@ class TopBar(QFrame):
         self.search_button.clicked.connect(self.search_clicked.emit)
         layout.addWidget(self.search_button)
 
-        self.queue_button = QPushButton("")
-        self.queue_button.setObjectName("iconButton")
-        self.queue_button.setFixedSize(32, 32)
-        self.queue_button.clicked.connect(self.queue_clicked.emit)
-        layout.addWidget(self.queue_button)
-
         self.settings_button = QPushButton("")
         self.settings_button.setObjectName("iconButton")
         self.settings_button.setFixedSize(32, 32)
@@ -64,5 +58,4 @@ class TopBar(QFrame):
         from ui.svg_icon import svg_icon
         text_sec = theme.get("text_secondary", "#9AA0AC")
         self.search_button.setIcon(svg_icon("search", text_sec, 18))
-        self.queue_button.setIcon(svg_icon("queue", text_sec, 18))
         self.settings_button.setIcon(svg_icon("settings", text_sec, 18))

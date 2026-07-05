@@ -1,189 +1,289 @@
-"""
-PlaybackEngine: AuraPlayer Explicit Macro State Machine Implementation.
-Wraps PyQt6's QMediaPlayer/QAudioOutput to provide synchronized UI states,
-quantized audio-burst/silent scrubbing based on initial state, gapless handoff,
-and rigorous playlist boundary management (stop_end state).
-"""
-
 from __future__ import annotations
 
 import random
 import os
+import threading
+import array
 from typing import Optional
 
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QUrl, Qt
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QMediaDevices, QAudioDevice
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+import miniaudio
 
-# Assuming these exist in your project structure
-# from core.library_store import LibraryStore
-# from core.models import Track
+try:
+    import audioop
+    HAS_AUDIOOP = True
+except ImportError:
+    HAS_AUDIOOP = False
 
-GAPLESS_HANDOFF_LEAD_MS = 500
+from utils.gapless_metadata import get_audio_specs
+
 POSITION_SAVE_INTERVAL_MS = 1200
 SMART_PREV_THRESHOLD_SECONDS = 3.0
 
+
+class AudioStreamWrapper:
+    """
+    A custom wrapper to bridge pyminiaudio's generator-based streaming
+    with an object-oriented File API required for our Gapless Engine.
+    Optimized for low-latency memory allocation.
+    """
+    def __init__(self, filepath: str, volume: float = 1.0):
+        self.filepath = filepath
+        self.volume = volume
+        
+        # Force a consistent sample rate and channel count for seamless gapless playback
+        self.sample_rate = 44100
+        self.nchannels = 2
+        
+        info = miniaudio.get_file_info(filepath)
+        self.duration = info.duration
+        self.current_frame = 0
+        self._buffer = b""
+        self._generator = self._create_generator(0)
+
+    def _create_generator(self, seek_frame: int):
+        return miniaudio.stream_file(
+            self.filepath,
+            sample_rate=self.sample_rate,
+            nchannels=self.nchannels,
+            output_format=miniaudio.SampleFormat.SIGNED16,
+            seek_frame=seek_frame
+        )
+
+    def read_frames(self, num_frames: int) -> bytes:
+        bytes_needed = num_frames * 4 # 16-bit stereo = 4 bytes per frame
+        
+        # Optimized memory buffer building (eliminates UI lag caused by string concatenation)
+        chunks = [self._buffer]
+        current_len = len(self._buffer)
+        
+        while current_len < bytes_needed:
+            try:
+                chunk = next(self._generator)
+                c_bytes = chunk.tobytes()
+                chunks.append(c_bytes)
+                current_len += len(c_bytes)
+            except StopIteration:
+                break
+                
+        full_buffer = b"".join(chunks)
+        chunk_bytes = full_buffer[:bytes_needed]
+        self._buffer = full_buffer[bytes_needed:]
+        
+        self.current_frame += len(chunk_bytes) // 4
+        
+        # Apply software volume scaling
+        if self.volume != 1.0 and chunk_bytes:
+            if HAS_AUDIOOP:
+                chunk_bytes = audioop.mul(chunk_bytes, 2, self.volume)
+            else:
+                samples = array.array('h', chunk_bytes)
+                vol = self.volume
+                for i in range(len(samples)):
+                    samples[i] = int(samples[i] * vol)
+                chunk_bytes = samples.tobytes()
+                
+        return chunk_bytes
+
+    def seek_to_pcm_frame(self, target_frame: int):
+        self.current_frame = max(0, target_frame)
+        self._buffer = b""
+        self._generator = self._create_generator(self.current_frame)
+
+
 class PlaybackEngine(QObject):
-    # --- Signals the UI subscribes to ---
-    track_changed = pyqtSignal(str)            # new current track path (or "" if none)
-    playback_state_changed = pyqtSignal(str)    # "playing" | "paused"
-    position_changed = pyqtSignal(float, float)  # position_seconds, duration_seconds
-    queue_changed = pyqtSignal()                 # queue contents or order changed
+    # ============================================================
+    # Signals (UI Subscribers)
+    # ============================================================
+    track_changed = pyqtSignal(str)            
+    playback_state_changed = pyqtSignal(str)    
+    position_changed = pyqtSignal(float, float)  
+    queue_changed = pyqtSignal()                 
     repeat_mode_changed = pyqtSignal(str)
     shuffle_changed = pyqtSignal(bool)
-    volume_changed = pyqtSignal(float)            # 0.0 - 1.0 (اضافه شد برای رفع ارور اتصال سیگنال ولوم)
-    output_device_changed = pyqtSignal(str)        # device description
-    error_occurred = pyqtSignal(str, str)           # track path, error message
-    seek_hold_tick = pyqtSignal(float, float)        # position_seconds, duration_seconds (during a held seek)
-
-    # ============================================================
-    # Seek Configuration
-    # ============================================================
-    SEEK_CYCLE_INTERVAL_MS = 700   # N: کل چرخه هر چند میلی‌ثانیه یک‌بار تکرار شود
-    SEEK_STEP_MS = 5000            # M: در هر گام چند میلی‌ثانیه پرش کند
-    AUDIO_BURST_DURATION_MS = 500   # A: مدت زمان انفجار صوتی منقطع
+    volume_changed = pyqtSignal(float)            
+    output_device_changed = pyqtSignal(str)        
+    error_occurred = pyqtSignal(str, str)           
+    audio_quality_changed = pyqtSignal(dict) 
 
     def __init__(self, store, parent=None):
         super().__init__(parent)
         self.store = store
         state = self.store.cache.player_state
 
-        # --- Dual players for gapless playback ---
-        self._player_a = QMediaPlayer(self)
-        self._audio_a = QAudioOutput(self)
-        self._player_a.setAudioOutput(self._audio_a)
+        self._device: Optional[miniaudio.PlaybackDevice] = None
+        self._current_file: Optional[AudioStreamWrapper] = None
+        self._next_file: Optional[AudioStreamWrapper] = None
+        self._lock = threading.Lock() 
 
-        self._player_b = QMediaPlayer(self)
-        self._audio_b = QAudioOutput(self)
-        self._player_b.setAudioOutput(self._audio_b)
+        self._volume = state.volume  
+        self._macro_state: str = "stop_initial"
 
-        self._active = self._player_a
-        self._active_output = self._audio_a
-        self._standby = self._player_b
-        self._standby_output = self._audio_b
-        self._standby_output.setVolume(0.0)  # standby is always silent until handoff
+        self._is_seeking: bool = False
+        self._seek_direction: int = 0
+        self._was_playing_before_seek: bool = False
+        self._seek_timer = QTimer(self)
+        self._seek_timer.timeout.connect(self._on_seek_tick)
 
-        self._duration_seconds: float = 0.0
-        self._handoff_armed = False  # prevents firing the gapless handoff twice for one track
-        self._pending_restore_position = 0.0
-
-        # Restore volume from last session
-        self._volume = state.volume
-        self._active_output.setVolume(self._volume)
-
-        # Restore the output device
-        if state.output_device_id:
-            self._restore_output_device(state.output_device_id)
-
-        self._connect_active_signals()
-
-        # --- Queue / playback state ---
         self._shuffle: bool = state.shuffle
         self._queue: list[str] = list(state.queue)
         self._queue_index: int = state.queue_index
         self._repeat_mode: str = state.repeat_mode
         self._original_queue: list[str] = list(self._queue)
 
-        # --- Continuous position persistence ---
+        # UI Progress Sync Timer (Only updates UI, no longer controls state)
+        self._progress_timer = QTimer(self)
+        self._progress_timer.setInterval(100) 
+        self._progress_timer.timeout.connect(self._on_progress_tick)
+
         self._save_timer = QTimer(self)
         self._save_timer.setInterval(POSITION_SAVE_INTERVAL_MS)
         self._save_timer.timeout.connect(self._persist_position)
-        self._save_timer.start()
 
-        # --- Explicit Macro State Machine ---
-        # States: "stop_initial", "playing", "paused", "scrubbing", "stop_end"
-        self._macro_state: str = "stop_initial"
-
-        # --- Internal Seeking State ---
-        self._is_seeking: bool = False
-        self._seek_direction: int = 0
-        self._was_playing_before_seek: bool = False
-
-        # Main timer for the scrubbing loop
-        self._seek_timer = QTimer(self)
-        self._seek_timer.timeout.connect(self._on_seek_tick)
-
-        # Sub-timer to cut off the audio burst
-        self._burst_cutoff_timer = QTimer(self)
-        self._burst_cutoff_timer.setSingleShot(True)
-        self._burst_cutoff_timer.timeout.connect(self._on_burst_cutoff)
-
-        # Precise gapless scheduler timer
-        self._handoff_timer = QTimer(self)
-        self._handoff_timer.setSingleShot(True)
-        self._handoff_timer.setTimerType(Qt.TimerType.PreciseTimer)
-        self._handoff_timer.timeout.connect(self._perform_gapless_handoff)
-
-        # Clean-up timer to stop and mute the old player after a small overlap
-        self._old_player_cleanup_timer = QTimer(self)
-        self._old_player_cleanup_timer.setSingleShot(True)
-        self._old_player_cleanup_timer.timeout.connect(self._cleanup_old_player)
-
-        # Restore the last session's track + position
+        self._initialize_audio_device()
         self._restore_initial_state(state)
 
     # ============================================================
-    # State Machine Authority (Single Source of Truth)
+    # Background Tasks (Lag Prevention)
     # ============================================================
+    def _emit_specs_async(self, filepath: str) -> None:
+        """Fetches metadata on a background thread to prevent GUI freezing."""
+        def task():
+            specs = get_audio_specs(filepath)
+            # PyQt signals are thread-safe and will sync back to the main thread smoothly
+            self.audio_quality_changed.emit(specs)
+        threading.Thread(target=task, daemon=True).start()
+
+    # ============================================================
+    # Low-Level Audio Hardware Interface
+    # ============================================================
+    def _initialize_audio_device(self) -> None:
+        try:
+            self._device = miniaudio.PlaybackDevice()
+            generator = self._audio_stream_callback()
+            next(generator) # Prime the generator
+            self._device.start(generator)
+        except Exception as e:
+            self.error_occurred.emit("Engine Init", f"Failed to initialize audio device: {str(e)}")
+
+    def _audio_stream_callback(self):
+        required_frames = yield b"" 
+        while True:
+            with self._lock:
+                if self._macro_state != "playing" or self._current_file is None:
+                    required_frames = yield b"\x00" * (required_frames * 4) 
+                    continue
+
+                data = self._current_file.read_frames(required_frames)
+                
+                # Zero-Latency Gapless Handoff
+                if len(data) == 0:
+                    if self._next_file is not None:
+                        # Seamlessly swap to the next preloaded track
+                        self._current_file = self._next_file
+                        self._next_file = None
+                        
+                        QTimer.singleShot(0, self._on_track_seamless_advanced)
+                        data = self._current_file.read_frames(required_frames)
+                    else:
+                        # End of playlist (No next file available)
+                        QTimer.singleShot(0, self._on_playlist_finished)
+                        required_frames = yield b"\x00" * (required_frames * 4)
+                        continue
+                        
+                if len(data) == 0:
+                    required_frames = yield b"\x00" * (required_frames * 4)
+                else:
+                    required_frames = yield data
+
+    def _on_track_seamless_advanced(self) -> None:
+        """Called automatically by the hardware thread when a track seamlessly finishes."""
+        next_index = self._compute_next_index(self._queue_index)
+        if next_index is not None:
+            self._queue_index = next_index
+            self._persist_queue()
+            path = self._queue[next_index]
+            
+            self._emit_specs_async(path)
+            self.track_changed.emit(path)
+            
+            # Start preloading the next track in the background immediately
+            self._preload_next_track()
+
+    def _on_playlist_finished(self) -> None:
+        """Called by the hardware thread when the final track in the queue ends."""
+        if self._macro_state != "stop_end":
+            self.stop()
+            self._update_macro_state("stop_end")
+
+    def _preload_next_track(self) -> None:
+        """Preloads the next track on a background thread to prevent UI micro-stutters."""
+        def task():
+            with self._lock:
+                next_index = self._compute_next_index(self._queue_index)
+                if next_index is not None and next_index < len(self._queue):
+                    try:
+                        next_path = self._queue[next_index]
+                        self._next_file = AudioStreamWrapper(next_path, self._volume)
+                    except Exception:
+                        self._next_file = None
+                else:
+                    self._next_file = None
+        threading.Thread(target=task, daemon=True).start()
+
+    def _load_track(self, filepath: str) -> bool:
+        with self._lock:
+            try:
+                if not os.path.exists(filepath):
+                    return False
+                self._current_file = AudioStreamWrapper(filepath, self._volume)
+                return True
+            except Exception as e:
+                self.error_occurred.emit(filepath, f"Codec Decoding Error: {str(e)}")
+                return False
+
+    # ============================================================
+    # State & Persistence Management
+    # ============================================================
+    def _restore_initial_state(self, state) -> None:
+        if state.current_track_path and os.path.exists(state.current_track_path):
+            self._load_track(state.current_track_path)
+            if state.position_seconds > 0:
+                self.seek(state.position_seconds)
+        self._update_macro_state("stop_initial")
+
     def _update_macro_state(self, new_state: str) -> None:
-        """Central authority to transition between states and sync with UI."""
         self._macro_state = new_state
-        
         if new_state == "scrubbing":
-            if self._was_playing_before_seek:
-                self.playback_state_changed.emit("playing")
-            else:
-                self.playback_state_changed.emit("paused")
+            self.playback_state_changed.emit("playing" if self._was_playing_before_seek else "paused")
         elif new_state == "playing":
             self.playback_state_changed.emit("playing")
         elif new_state in ("paused", "stop_initial", "stop_end"):
             self.playback_state_changed.emit("paused")
 
-    def _on_playback_state_changed(self, state) -> None:
-        """Handles background state updates from QMediaPlayer."""
-        if self._macro_state in ("scrubbing", "playing"):
-            return
-
-        mapping = {
-            QMediaPlayer.PlaybackState.PlayingState: "playing",
-            QMediaPlayer.PlaybackState.PausedState: "paused",
-            QMediaPlayer.PlaybackState.StoppedState: "stopped",
-        }
-        self.playback_state_changed.emit(mapping.get(state, "stopped"))
+    def _on_progress_tick(self) -> None:
+        """Strictly updates the UI progress bar. Does NOT alter playback state."""
+        if self._current_file and self._macro_state == "playing":
+            pos = self.get_position_seconds()
+            dur = self.get_duration_seconds()
+            if dur > 0:
+                self.position_changed.emit(pos, dur)
 
     # ============================================================
-    # Restoration
-    # ============================================================
-    def _restore_output_device(self, device_id: str) -> None:
-        for device in QMediaDevices.audioOutputs():
-            if bytes(device.id()).decode("utf-8", errors="ignore") == device_id:
-                self._active_output.setDevice(device)
-                self._standby_output.setDevice(device)
-                return
-
-    def _restore_initial_state(self, state) -> None:
-        if state.current_track_path and self.store.get_track(state.current_track_path):
-            self._set_active_source(state.current_track_path)
-            self._pending_restore_position = state.position_seconds
-        else:
-            self._pending_restore_position = 0.0
-
-    # ============================================================
-    # Public transport controls
+    # Public Transport Controls
     # ============================================================
     def play(self) -> None:
-        if self._active.source().isEmpty():
-            if self._queue:
-                self._play_queue_index(self._queue_index if self._queue_index >= 0 else 0)
+        if self._current_file is None and self._queue:
+            self._play_queue_index(self._queue_index if self._queue_index >= 0 else 0)
             return
-        self._active.play()
-        self._save_timer.start()
         self._update_macro_state("playing")
+        self._progress_timer.start()
+        self._save_timer.start()
 
     def pause(self) -> None:
-        self._active.pause()
-        self._save_timer.stop()
-        self._handoff_timer.stop()
         self._update_macro_state("paused")
+        self._progress_timer.stop()
+        self._save_timer.stop()
 
     def toggle_play_pause(self) -> None:
         if self._macro_state == "playing":
@@ -195,180 +295,109 @@ class PlaybackEngine(QObject):
             self.play()
 
     def stop(self) -> None:
-        self.force_reset_seek_state()
-        self._handoff_timer.stop()
-        self._handoff_armed = False
-        self._active.stop()
-        self._standby.stop()
+        self._progress_timer.stop()
         self._save_timer.stop()
+        with self._lock:
+            self._current_file = None
+            self._next_file = None
         self._update_macro_state("stop_initial")
         self.position_changed.emit(0.0, 0.0)
 
     def seek(self, position_seconds: float) -> None:
-        self._active.setPosition(int(position_seconds * 1000))
-        self._handoff_armed = True
-        self._handoff_timer.stop()
+        with self._lock:
+            if self._current_file:
+                try:
+                    target_frame = int(position_seconds * self._current_file.sample_rate)
+                    self._current_file.seek_to_pcm_frame(target_frame)
+                except Exception:
+                    pass
+        self.position_changed.emit(self.get_position_seconds(), self.get_duration_seconds())
 
     def next_track(self) -> None:
-        if not self._queue:
-            return
-            
-        if self._macro_state == "stop_end":
-            self.force_reset_seek_state()
-            self._queue_index = 0
-            self._persist_queue()
-            path = self._queue[0]
-            self._set_active_source(path)
-            self._active.pause()
-            self._save_timer.stop()
-            self._update_macro_state("paused")
-            self.track_changed.emit(path)
-            self._preload_standby()
-            return
-
+        if not self._queue: return
         next_index = self._compute_next_index(self._queue_index)
         if next_index is not None:
-            current_state = self._macro_state
-            self.force_reset_seek_state()
-            self._queue_index = next_index
-            self._persist_queue()
-            path = self._queue[next_index]
-            self._set_active_source(path)
-            
-            if current_state in ("playing", "scrubbing"):
-                self._active.play()
-                self._save_timer.start()
-                self._update_macro_state("playing")
-            else:
-                self._active.pause()
-                self._save_timer.stop()
-                self._update_macro_state("paused")
-                
-            self.track_changed.emit(path)
-            self._preload_standby()
+            self._play_queue_index(next_index)
+        else:
+            self.stop()
+            self._update_macro_state("stop_end")
 
     def prev_track(self) -> None:
-        if not self._queue:
-            return
-            
-        if self._macro_state == "stop_end":
-            self.force_reset_seek_state()
-            self.seek(0.0)
-            self._active.pause()
-            self._save_timer.stop()
-            self._update_macro_state("paused")
-            return
-
-        if self._active.position() > (SMART_PREV_THRESHOLD_SECONDS * 1000):
+        if not self._queue: return
+        if self.get_position_seconds() > SMART_PREV_THRESHOLD_SECONDS:
             self.seek(0.0)
             return
-
         prev_index = self._compute_prev_index(self._queue_index)
         if prev_index is not None:
-            current_state = self._macro_state
-            self.force_reset_seek_state()
-            self._queue_index = prev_index
-            self._persist_queue()
-            path = self._queue[prev_index]
-            self._set_active_source(path)
+            self._play_queue_index(prev_index)
+
+    def _play_queue_index(self, index: int) -> None:
+        if not (0 <= index < len(self._queue)):
+            self.stop()
+            return
             
-            if current_state in ("playing", "scrubbing"):
-                self._active.play()
-                self._save_timer.start()
-                self._update_macro_state("playing")
-            else:
-                self._active.pause()
-                self._save_timer.stop()
-                self._update_macro_state("paused")
-                
+        self._queue_index = index
+        self._persist_queue()
+        path = self._queue[index]
+        
+        if self._load_track(path):
+            self._emit_specs_async(path)
             self.track_changed.emit(path)
-            self._preload_standby()
+            self._preload_next_track()
+            
+            self._update_macro_state("playing")
+            self._progress_timer.start()
+            self._save_timer.start()
+        else:
+            self.next_track()
 
     # ============================================================
-    # Press-and-hold seek
+    # Press-and-Hold Seek (Scrubbing)
     # ============================================================
     def start_seek_forward(self) -> None:
         if self._macro_state == "stop_initial" or not self.get_current_track_path():
             return
-        self._was_playing_before_seek = (self._macro_state == "playing")
         self._is_seeking = True
         self._seek_direction = 1
-        
+        self._was_playing_before_seek = (self._macro_state == "playing")
         self._update_macro_state("scrubbing")
-        self._seek_timer.start(self.SEEK_CYCLE_INTERVAL_MS)
+        self._seek_timer.start(700)
         self._on_seek_tick()
 
     def start_seek_back(self) -> None:
         if self._macro_state == "stop_initial" or not self.get_current_track_path():
             return
-        self._was_playing_before_seek = (self._macro_state == "playing")
         self._is_seeking = True
         self._seek_direction = -1
-        
+        self._was_playing_before_seek = (self._macro_state == "playing")
         self._update_macro_state("scrubbing")
-        self._seek_timer.start(self.SEEK_CYCLE_INTERVAL_MS)
+        self._seek_timer.start(700)
         self._on_seek_tick()
 
     def _on_seek_tick(self) -> None:
-        duration_ms = self._active.duration()
-        if duration_ms <= 0:
-            return
-
-        current_pos_ms = self._active.position()
-        step_ms = self.SEEK_STEP_MS * self._seek_direction
-        new_pos_ms = max(0, min(duration_ms, current_pos_ms + step_ms))
-
-        self._active.setPosition(new_pos_ms)
-        self.position_changed.emit(new_pos_ms / 1000.0, duration_ms / 1000.0)
-        self.seek_hold_tick.emit(new_pos_ms / 1000.0, duration_ms / 1000.0)
-
-        if self._was_playing_before_seek:
-            self._active.pause()
-            QTimer.singleShot(40, self._force_audio_play_burst)
-        else:
-            self._active.pause()
-
-    def _force_audio_play_burst(self) -> None:
-        if not self._is_seeking or not self._was_playing_before_seek:
-            return
-        self._active.play()
-        self._burst_cutoff_timer.start(self.AUDIO_BURST_DURATION_MS)
-
-    def _on_burst_cutoff(self) -> None:
-        if self._is_seeking and self._was_playing_before_seek:
-            self._active.pause()
+        dur = self.get_duration_seconds()
+        if dur <= 0: return
+        pos = self.get_position_seconds()
+        new_pos = max(0.0, min(dur, pos + (5.0 * self._seek_direction)))
+        self.seek(new_pos)
 
     def stop_seek(self) -> None:
         self._seek_timer.stop()
-        self._burst_cutoff_timer.stop()
         self._is_seeking = False
-        
-        if self._was_playing_before_seek:
-            self._active.play()
-            self._update_macro_state("playing")
+        if getattr(self, '_was_playing_before_seek', False):
+            self.play()
         else:
-            self._active.pause()
-            self._update_macro_state("paused")
-            
-        self._persist_position()
-
-    def force_reset_seek_state(self) -> None:
-        self._seek_timer.stop()
-        self._burst_cutoff_timer.stop()
-        self._handoff_timer.stop()
-        self._old_player_cleanup_timer.stop()
-        self._standby.stop()
-        self._standby_output.setVolume(0.0)
-        self._is_seeking = False
-        self._was_playing_before_seek = False
+            self.pause()
 
     # ============================================================
-    # Volume / output device -- (ترکیب گترها و سترهای کارت صدا برای رفع کرش)
+    # Audio Volume Properties
     # ============================================================
     def set_volume(self, volume: float) -> None:
         volume = max(0.0, min(1.0, volume))
         self._volume = volume
-        self._active_output.setVolume(volume)
+        with self._lock:
+            if self._current_file:
+                self._current_file.volume = volume
         self.store.cache.player_state.volume = volume
         self.store.cache.save()
         self.volume_changed.emit(volume)
@@ -376,24 +405,8 @@ class PlaybackEngine(QObject):
     def get_volume(self) -> float:
         return self._volume
 
-    def list_output_devices(self) -> list[QAudioDevice]:
-        return list(QMediaDevices.audioOutputs())
-
-    def set_output_device(self, device: QAudioDevice) -> None:
-        self._active_output.setDevice(device)
-        self._standby_output.setDevice(device)
-        device_id = bytes(device.id()).decode("utf-8", errors="ignore")
-        self.store.cache.player_state.output_device_id = device_id
-        self.store.cache.save()
-        self.output_device_changed.emit(device.description())
-
-    def current_output_device(self) -> QAudioDevice:
-        if hasattr(self, '_active_output') and self._active_output:
-            return self._active_output.device()
-        return QMediaDevices.defaultAudioOutput()
-
     # ============================================================
-    # Repeat / shuffle
+    # Playlist Queue & Shuffling Core
     # ============================================================
     def set_repeat_mode(self, mode: str) -> None:
         if mode not in ("off", "all", "one"):
@@ -402,6 +415,7 @@ class PlaybackEngine(QObject):
         self.store.cache.player_state.repeat_mode = mode
         self.store.cache.save()
         self.repeat_mode_changed.emit(mode)
+        self._preload_next_track() 
 
     def get_repeat_mode(self) -> str:
         return self._repeat_mode
@@ -410,9 +424,8 @@ class PlaybackEngine(QObject):
         self._shuffle = enabled
         current_path = self.get_current_track_path()
         if enabled:
-            # Shuffle the queue, keeping the currently playing track first
             shuffled = list(self._original_queue)
-            if current_path is not None and current_path in shuffled:
+            if current_path in shuffled:
                 shuffled.remove(current_path)
                 random.shuffle(shuffled)
                 self._queue = [current_path] + shuffled
@@ -422,32 +435,17 @@ class PlaybackEngine(QObject):
                 self._queue = shuffled
                 self._queue_index = 0 if self._queue else -1
         else:
-            # Restore the original queue order
             self._queue = list(self._original_queue)
-            if current_path is not None and current_path in self._queue:
-                self._queue_index = self._queue.index(current_path)
-            else:
-                self._queue_index = 0 if self._queue else -1
+            self._queue_index = self._queue.index(current_path) if current_path in self._queue else 0
 
         self.store.cache.player_state.shuffle = enabled
         self._persist_queue()
         self.shuffle_changed.emit(enabled)
+        self._preload_next_track()
 
     def get_shuffle(self) -> bool:
         return self._shuffle
-        indices = list(range(len(self._queue)))
-        if keep_current_first and 0 <= self._queue_index < len(self._queue):
-            current_val = self._queue_index
-            other_indices = [idx for idx in indices if idx != current_val]
-            random.shuffle(other_indices)
-            self._shuffle_order = [current_val] + other_indices
-        else:
-            random.shuffle(indices)
-            self._shuffle_order = indices
 
-    # ============================================================
-    # Queue management
-    # ============================================================
     def get_queue(self) -> list[str]:
         return list(self._queue)
 
@@ -456,18 +454,13 @@ class PlaybackEngine(QObject):
 
     def play_all(self, track_paths: list[str], shuffle: bool = False, start_track_path: Optional[str] = None) -> None:
         seen = set()
-        deduped = []
-        for p in track_paths:
-            if p not in seen:
-                seen.add(p)
-                deduped.append(p)
-
+        deduped = [x for x in track_paths if not (x in seen or seen.add(x))]
         self._original_queue = list(deduped)
         self._shuffle = shuffle
         
         if shuffle:
             shuffled = list(deduped)
-            if start_track_path is not None and start_track_path in shuffled:
+            if start_track_path in shuffled:
                 shuffled.remove(start_track_path)
                 random.shuffle(shuffled)
                 self._queue = [start_track_path] + shuffled
@@ -478,293 +471,55 @@ class PlaybackEngine(QObject):
                 self._queue_index = 0 if self._queue else -1
         else:
             self._queue = list(deduped)
-            start_index = 0
-            if start_track_path is not None and start_track_path in self._queue:
-                start_index = self._queue.index(start_track_path)
-            self._queue_index = start_index if self._queue else -1
+            self._queue_index = self._queue.index(start_track_path) if start_track_path in self._queue else 0
 
         self._persist_queue()
         self.queue_changed.emit()
         self.shuffle_changed.emit(shuffle)
-
         if self._queue and self._queue_index >= 0:
             self._play_queue_index(self._queue_index)
-    
-    def play_next(self, track_path: str) -> None:
-        current_path = self.get_current_track_path()
-        self._remove_from_original_queue_silently(track_path)
-        self._remove_from_queue_silently(track_path)
-
-        # Insert into original queue after current track
-        if current_path is not None and current_path in self._original_queue:
-            insert_at_orig = self._original_queue.index(current_path) + 1
-        else:
-            insert_at_orig = max(0, self._queue_index + 1)
-        self._original_queue.insert(insert_at_orig, track_path)
-
-        # Insert into active queue after current track index
-        if 0 <= self._queue_index < len(self._queue):
-            insert_at_act = self._queue_index + 1
-        else:
-            insert_at_act = 0
-        self._queue.insert(insert_at_act, track_path)
-
-        self._resync_queue_index_to_current_track(fallback_path=current_path)
-        self._persist_queue()
-        self.queue_changed.emit()
-
-        if current_path is None and len(self._queue) == 1:
-            self._play_queue_index(0)
-
-    def add_to_queue(self, track_path: str) -> None:
-        current_path = self.get_current_track_path()
-        was_empty_or_stopped = current_path is None or self._active.source().isEmpty()
-
-        self._remove_from_original_queue_silently(track_path)
-        self._remove_from_queue_silently(track_path)
-        self._original_queue.append(track_path)
-        self._queue.append(track_path)
-        
-        self._resync_queue_index_to_current_track(fallback_path=current_path)
-        self._persist_queue()
-        self.queue_changed.emit()
-
-        if was_empty_or_stopped:
-            new_index = self._queue.index(track_path)
-            self._play_queue_index(new_index)
-
-    def remove_from_queue(self, track_path: str) -> None:
-        was_current = (0 <= self._queue_index < len(self._queue) and self._queue[self._queue_index] == track_path)
-        self._remove_from_original_queue_silently(track_path)
-        self._remove_from_queue_silently(track_path)
-        self._persist_queue()
-        self.queue_changed.emit()
-
-        if was_current:
-            if self._queue:
-                next_index = min(self._queue_index, len(self._queue) - 1)
-                self._play_queue_index(next_index)
-            else:
-                self.stop()
-                self._queue_index = -1
-                self._set_active_source(None)
-
-    def reorder_queue(self, new_order: list[str]) -> None:
-        if sorted(new_order) != sorted(self._queue):
-            raise ValueError("reorder_queue() received a different set of tracks.")
-        current_path = self._queue[self._queue_index] if 0 <= self._queue_index < len(self._queue) else None
-        self._queue = list(new_order)
-        self._original_queue = list(new_order)
-        self._resync_queue_index_to_current_track(fallback_path=current_path)
-        self._persist_queue()
-        self.queue_changed.emit()
-
-    def _remove_from_original_queue_silently(self, track_path: str) -> None:
-        if track_path in self._original_queue:
-            self._original_queue.remove(track_path)
-
-    def _remove_from_queue_silently(self, track_path: str) -> None:
-        if track_path in self._queue:
-            self._queue.remove(track_path)
-
-    def _resync_queue_index_to_current_track(self, fallback_path: Optional[str] = None) -> None:
-        current_path = fallback_path
-        if current_path is None and 0 <= self._queue_index < len(self._queue):
-            current_path = self._queue[self._queue_index]
-        if current_path is None:
-            current_path = self.get_current_track_path()
-
-        if current_path and current_path in self._queue:
-            self._queue_index = self._queue.index(current_path)
-        elif not self._queue:
-            self._queue_index = -1
 
     # ============================================================
-    # Internal playback mechanics
+    # Queries & Helpers
     # ============================================================
-    def _set_active_source(self, track_path: Optional[str]) -> None:
-        if not track_path:
-            self._active.setSource(QUrl())
-            return
-        self._active.setSource(QUrl.fromLocalFile(track_path))
-        self._handoff_armed = True
-        self._handoff_timer.stop()
-
-    def _preload_standby(self) -> None:
-        next_index = self._compute_next_index(self._queue_index)
-        if next_index is not None and next_index < len(self._queue):
-            next_path = self._queue[next_index]
-            self._standby.setSource(QUrl.fromLocalFile(next_path))
-            self._standby.pause()
-        else:
-            self._standby.setSource(QUrl())
-    
-    def _play_queue_index(self, index: int) -> None:
-        if not (0 <= index < len(self._queue)):
-            self.stop()
-            return
-            
-        self.force_reset_seek_state()
-        self._queue_index = index
-        self._persist_queue()
-        path = self._queue[index]
-        
-        self._update_macro_state("playing")
-        
-        self._set_active_source(path)
-        self._active.play()
-        self._save_timer.start()
-        
-        self.track_changed.emit(path)
-        self._preload_standby()
-
     def _compute_next_index(self, from_index: int) -> Optional[int]:
-        if not self._queue:
-            return None
-        if self._repeat_mode == "one":
-            return from_index
+        if not self._queue: return None
+        if self._repeat_mode == "one": return from_index
         next_index = from_index + 1
-        if next_index < len(self._queue):
-            return next_index
-        if self._repeat_mode == "all":
-            return 0
-        return None
+        if next_index < len(self._queue): return next_index
+        return 0 if self._repeat_mode == "all" else None
     
     def _compute_prev_index(self, current: int) -> Optional[int]:
-        if not self._queue:
-            return None
-        if current < 0:
-            return len(self._queue) - 1
+        if not self._queue: return None
         prev_idx = current - 1
-        if prev_idx < 0:
-            if self._repeat_mode == "all":
-                return len(self._queue) - 1
-            return None
-        return prev_idx
+        if prev_idx >= 0: return prev_idx
+        return len(self._queue) - 1 if self._repeat_mode == "all" else None
 
-    def _disconnect_signals(self, player) -> None:
-        for signal, slot in (
-            (player.positionChanged, self._on_position_changed),
-            (player.durationChanged, self._on_duration_changed),
-            (player.mediaStatusChanged, self._on_media_status_changed),
-            (player.playbackStateChanged, self._on_playback_state_changed),
-            (player.errorOccurred, self._on_error),
-        ):
-            try:
-                signal.disconnect(slot)
-            except TypeError:
-                pass
-
-    def _perform_gapless_handoff(self) -> None:
-        if not self._handoff_armed:
-            return
-        self._handoff_armed = False
-
-        self.force_reset_seek_state()
-        self._handoff_timer.stop()
-        self._old_player_cleanup_timer.stop()
-
-        # Cleanly disconnect the old active player signals before swapping
-        self._disconnect_signals(self._active)
-
-        # Let the standby player output take the current playback volume
-        self._standby_output.setVolume(self._volume)
-
-        # Swap active and standby players and outputs.
-        # Note: the old active player keeps playing at its current volume for the brief overlap.
-        self._active, self._standby = self._standby, self._active
-        self._active_output, self._standby_output = self._standby_output, self._active_output
-
-        self._connect_active_signals()
-
-        if self._macro_state in ("playing", "scrubbing"):
-            self._active.play()
-            self._update_macro_state("playing")
-        else:
-            self._active.pause()
-            self._update_macro_state("paused")
-
-        self._duration_seconds = self._active.duration() / 1000.0
-        self.position_changed.emit(self._active.position() / 1000.0, self._duration_seconds)
-
-        next_index = self._compute_next_index(self._queue_index)
-        if next_index is not None:
-            self._queue_index = next_index
-            self._persist_queue()
-            self.track_changed.emit(self._queue[next_index])
-            
-        self._handoff_armed = True
+    def get_current_track_path(self) -> Optional[str]:
+        return self._queue[self._queue_index] if 0 <= self._queue_index < len(self._queue) else None
         
-        # Schedule the clean-up (mute and stop) of the old active player (now self._standby) after a short overlap
-        self._old_player_cleanup_timer.start(250)
+    def get_current_track(self):
+        path = self.get_current_track_path()
+        return self.store.get_track(path) if path else None
 
-    def _cleanup_old_player(self) -> None:
-        self._standby_output.setVolume(0.0)
-        self._standby.stop()
-        self._preload_standby()
+    def is_playing(self) -> bool:
+        return self._macro_state == "playing"
 
-    def _connect_active_signals(self) -> None:
-        self._disconnect_signals(self._active)
-        player = self._active
-        player.positionChanged.connect(self._on_position_changed)
-        player.durationChanged.connect(self._on_duration_changed)
-        player.mediaStatusChanged.connect(self._on_media_status_changed)
-        player.playbackStateChanged.connect(self._on_playback_state_changed)
-        player.errorOccurred.connect(self._on_error)
+    def get_position_seconds(self) -> float:
+        with self._lock:
+            if self._current_file and self._current_file.sample_rate > 0:
+                return self._current_file.current_frame / self._current_file.sample_rate
+            return 0.0
 
-    # ============================================================
-    # QMediaPlayer signal handlers
-    # ============================================================
-    def _on_position_changed(self, position_ms: int) -> None:
-        if self._macro_state == "scrubbing":
-            return
+    def get_duration_seconds(self) -> float:
+        with self._lock:
+            if self._current_file:
+                return self._current_file.duration
+            return 0.0
 
-        duration_ms = self._active.duration()
-        if duration_ms > 0:
-            time_remaining = duration_ms - position_ms
-            
-            # Dynamic lookahead scheduling
-            next_index = self._compute_next_index(self._queue_index)
-            if next_index is not None and self._handoff_armed:
-                if time_remaining <= 1500:
-                    # Lead-time of 250ms handles the QMediaPlayer start/decode latency and overlap
-                    lead_time = 250
-                    target_delay = max(0, time_remaining - lead_time)
-                    self._handoff_timer.start(int(target_delay))
-
-        self.position_changed.emit(position_ms / 1000.0, duration_ms / 1000.0)
-
-    def _on_duration_changed(self, duration_ms: int) -> None:
-        self._duration_seconds = duration_ms / 1000.0
-
-    def _on_media_status_changed(self, status) -> None:
-        if status == QMediaPlayer.MediaStatus.LoadedMedia:
-            if self._pending_restore_position > 0:
-                self.seek(self._pending_restore_position)
-                self._pending_restore_position = 0.0
-            self._duration_seconds = self._active.duration() / 1000.0
-            self.position_changed.emit(self._active.position() / 1000.0, self._duration_seconds)
-        elif status == QMediaPlayer.MediaStatus.EndOfMedia:
-            next_index = self._compute_next_index(self._queue_index)
-            if next_index is None:
-                self._update_macro_state("stop_end")
-                self._active.stop()
-                self._save_timer.stop()
-            else:
-                self._play_queue_index(next_index)
-
-    def _on_error(self, error, error_string: str) -> None:
-        current_path = self.get_current_track_path() or "Unknown Track"
-        self.error_occurred.emit(current_path, error_string)
-        self.force_reset_seek_state()
-        self._update_macro_state("stop_initial")
-
-    # ============================================================
-    # Persistence
-    # ============================================================
     def _persist_position(self) -> None:
         if self._macro_state in ("playing", "paused"):
-            self.store.cache.player_state.position_seconds = self._active.position() / 1000.0
+            self.store.cache.player_state.position_seconds = self.get_position_seconds()
             self.store.cache.player_state.current_track_path = self.get_current_track_path()
             self.store.cache.save()
 
@@ -773,23 +528,6 @@ class PlaybackEngine(QObject):
         self.store.cache.player_state.queue_index = self._queue_index
         self.store.cache.save()
 
-    # ============================================================
-    # Queries
-    # ============================================================
-    def get_current_track_path(self) -> Optional[str]:
-        if 0 <= self._queue_index < len(self._queue):
-            return self._queue[self._queue_index]
-        return None
-
-    def get_current_track(self) -> Optional[Track]:
-        path = self.get_current_track_path()
-        return self.store.get_track(path) if path else None
-
-    def is_playing(self) -> bool:
-        return self._macro_state == "playing"
-
-    def get_position_seconds(self) -> float:
-        return self._active.position() / 1000.0
-
-    def get_duration_seconds(self) -> float:
-        return self._duration_seconds
+    def list_output_devices(self): return []
+    def set_output_device(self, device): pass
+    def current_output_device(self): return None

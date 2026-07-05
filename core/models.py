@@ -129,6 +129,7 @@ class Settings:
     )
     disabled_separators: list[str] = field(default_factory=list)
     theme: str = "dark"
+    column_widths: dict[str, list[int]] = field(default_factory=dict)
 
     def active_separators(self) -> list[str]:
         """The separators actually used for splitting -- all known

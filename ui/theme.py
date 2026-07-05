@@ -157,7 +157,7 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
         QTableView, QListView {{
             background-color: {c['bg']};
             border: none;
-            gridline-color: transparent;
+            gridline-color: {c['border']};
             outline: none;
             color: {c['text_primary']};
             selection-background-color: {c['surface_selected']};
@@ -183,6 +183,7 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             padding: 8px;
             border: none;
             border-bottom: 1px solid {c['border']};
+            border-right: 1px solid {c['border']};
             font-weight: 600;
             font-size: 12px;
             text-transform: uppercase;
@@ -258,6 +259,12 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             height: 0;
         }}
 
+        QSlider {{
+            background: transparent;
+            background-color: transparent;
+            border: none;
+        }}
+
         QSlider::groove:horizontal {{
             background: {c['border']};
             height: 4px;
@@ -315,6 +322,11 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
         QFrame#bottomBar {{
             background-color: {c['surface']};
             border-top: 1px solid {c['border']};
+        }}
+
+        QFrame#bottomBar QWidget {{
+            background: transparent;
+            background-color: transparent;
         }}
 
         QLabel#bottomBarArt {{

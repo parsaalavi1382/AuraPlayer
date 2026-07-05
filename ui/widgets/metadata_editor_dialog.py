@@ -302,7 +302,7 @@ class MetadataEditorDialog(QDialog):
             )
             self.cover_label.setPixmap(scaled)
         else:
-            self.cover_label.setText("💿")
+            self.cover_label.setText("♪")
             self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.cover_label.setFont(QFont("Segoe UI", 48))
 

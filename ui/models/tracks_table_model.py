@@ -49,6 +49,8 @@ class TracksTableModel(QAbstractTableModel):
         super().__init__(parent)
         self._tracks: list[Track] = []
         self._currently_playing_path: str | None = None
+        self._sort_column = COL_TITLE
+        self._sort_ascending = True
         # Theme-aware -- MainWindow updates this via set_danger_color()
         # whenever the active theme changes, so missing-file rows always
         # use the current theme's danger color instead of one baked in
@@ -77,7 +79,11 @@ class TracksTableModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return COLUMN_HEADERS[section]
+            base_header = COLUMN_HEADERS[section]
+            if section == self._sort_column:
+                arrow = "↑" if self._sort_ascending else "↓"
+                return f"{arrow} {base_header}"
+            return base_header
         return None
 
     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
@@ -169,8 +175,10 @@ class TracksTableModel(QAbstractTableModel):
 
     # ---------- Sorting (default: Title A-Z, per spec) ----------
 
-    def sort_alphabetical(self, column: int = COL_TITLE) -> None:
+    def sort_alphabetical(self, column: int = COL_TITLE, ascending: bool = True) -> None:
         self.layoutAboutToBeChanged.emit()
+        self._sort_column = column
+        self._sort_ascending = ascending
         key_fn = {
             COL_TITLE: lambda t: (t.title or "").lower(),
             COL_ARTISTS: lambda t: ", ".join(t.artists).lower(),
@@ -178,5 +186,5 @@ class TracksTableModel(QAbstractTableModel):
             COL_GENRE: lambda t: (t.genre or "").lower(),
             COL_DURATION: lambda t: t.duration or 0,
         }[column]
-        self._tracks.sort(key=key_fn)
+        self._tracks.sort(key=key_fn, reverse=not ascending)
         self.layoutChanged.emit()

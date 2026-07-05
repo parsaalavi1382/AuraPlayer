@@ -16,6 +16,7 @@ from core.library_store import LibraryStore
 from core.models import Track
 from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_GENRE, COL_DURATION
 from ui.views.tracks_view import TrackHoverDelegate, HoverEventFilter
+from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 
 
 class GenrePageView(QWidget):
@@ -78,12 +79,15 @@ class GenrePageView(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(40)
-        self.table.setShowGrid(False)
-        self.table.horizontalHeader().setSectionResizeMode(COL_TITLE, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ARTISTS, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_ALBUM, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_GENRE, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(COL_DURATION, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setShowGrid(True)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.setColumnWidth(COL_TITLE, 250)
+        self.table.setColumnWidth(COL_ARTISTS, 180)
+        self.table.setColumnWidth(COL_ALBUM, 180)
+        self.table.setColumnWidth(COL_GENRE, 120)
+        self.table.setColumnWidth(COL_DURATION, 80)
+        self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader(), self.store, "tracks_table")
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_row_double_clicked)
 

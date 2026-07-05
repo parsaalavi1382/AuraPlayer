@@ -144,7 +144,7 @@ class SeekBar(QWidget):
 
         self._elapsed_label = QLabel("0:00")
         self._elapsed_label.setObjectName("seekBarTime")
-        self._elapsed_label.setFixedWidth(36)
+        self._elapsed_label.setFixedWidth(42)
         self._elapsed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self._elapsed_label)
 
@@ -154,7 +154,7 @@ class SeekBar(QWidget):
 
         self._remaining_label = QLabel("-0:00")
         self._remaining_label.setObjectName("seekBarTime")
-        self._remaining_label.setFixedWidth(40)
+        self._remaining_label.setFixedWidth(42)
         self._remaining_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self._remaining_label)
 
