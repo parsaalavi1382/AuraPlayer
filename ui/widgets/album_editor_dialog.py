@@ -88,9 +88,11 @@ class AlbumEditorDialog(QDialog):
                 )
                 self.cover_label.setPixmap(scaled)
             else:
-                self.cover_label.setPixmap(svg_pixmap("disc", theme.get("text_secondary", "#8b949e"), 160))
+                from ui.svg_icon import get_default_cover
+                self.cover_label.setPixmap(get_default_cover(160, theme, corner_radius=8.0))
         else:
-            self.cover_label.setPixmap(svg_pixmap("disc", theme.get("text_secondary", "#8b949e"), 160))
+            from ui.svg_icon import get_default_cover
+            self.cover_label.setPixmap(get_default_cover(160, theme, corner_radius=8.0))
 
         left_layout.addWidget(self.cover_label)
 

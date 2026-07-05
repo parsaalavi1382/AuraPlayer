@@ -101,11 +101,12 @@ class AlbumHoverDelegate(QStyledItemDelegate):
                 )
                 painter.drawPixmap(cover_rect, scaled)
             else:
-                # Draw placeholder ♪
-                painter.save()
-                painter.setFont(QFont("Segoe UI", 14))
-                painter.drawText(cover_rect, Qt.AlignmentFlag.AlignCenter, "♪")
-                painter.restore()
+                from ui.svg_icon import get_default_cover
+                disc_px = get_default_cover(cover_size, theme, corner_radius=4.0)
+                if disc_px and not disc_px.isNull():
+                    painter.drawPixmap(cover_rect, disc_px)
+                else:
+                    painter.fillRect(cover_rect, QColor(theme.get("surface", "#1c1f26")))
 
             # Draw album name text on the right of the cover art
             text_rect_left = rect.left() + cover_size + 10

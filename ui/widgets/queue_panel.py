@@ -168,15 +168,17 @@ class QueueCoverLabel(QWidget):
 
         else:
 
-            painter.fillRect(cover_rect, QColor(bg))
+            from ui.svg_icon import get_default_cover
 
-            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
+            disc_px = get_default_cover(cover_rect.width(), self.theme_colors, corner_radius=4.0)
 
-            painter.setFont(font)
+            if disc_px and not disc_px.isNull():
 
-            painter.setPen(QColor(text_sec))
+                painter.drawPixmap(cover_rect, disc_px)
 
-            painter.drawText(cover_rect, Qt.AlignmentFlag.AlignCenter, "♪")
+            else:
+
+                painter.fillRect(cover_rect, QColor(bg))
 
         painter.restore()
 

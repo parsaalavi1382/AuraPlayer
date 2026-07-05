@@ -87,10 +87,10 @@ class AlbumCard(QWidget):
             )
             self.cover_label.setPixmap(scaled)
         else:
-            self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.cover_label.setFont(QFont("Segoe UI", 32))
-            self.cover_label.setText("♪")
-            self.cover_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface); color: var(--text_secondary);", theme))
+            from ui.svg_icon import get_default_cover
+            self.cover_label.setText("")
+            disc_px = get_default_cover(150, theme, corner_radius=8.0)
+            self.cover_label.setPixmap(disc_px)
             
         layout.addWidget(self.cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
         

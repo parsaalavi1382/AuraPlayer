@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="AuraPlayer Logo" width="160" />
+</p>
+
 # AuraPlayer — Modern Offline Native Audio Player
 
 AuraPlayer is a native offline-first music player featuring a gorgeous, theme-adaptive design, continuous music playback with no silence between tracks, and comprehensive dynamic pages to easily explore your music collection.

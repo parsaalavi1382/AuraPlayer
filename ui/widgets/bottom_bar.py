@@ -250,7 +250,8 @@ class BottomBar(QFrame):
 
         # Re-render default art if no custom art is loaded
         if not getattr(self, "_has_custom_art", False):
-            self.art_label.setPixmap(svg_pixmap("disc", text_secondary, 64))
+            from ui.svg_icon import get_default_cover
+            self.art_label.setPixmap(get_default_cover(64, theme, corner_radius=4.0))
 
         accent = theme.get("accent", "#6C5CE7")
         groove_bg = theme.get("border", "#2E323C")
@@ -448,8 +449,9 @@ class BottomBar(QFrame):
             self.title_label.setText("No track playing")
             self._clear_artist_layout()
             self._has_custom_art = False
-            color = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
-            self.art_label.setPixmap(svg_pixmap("disc", color, 64))
+            from ui.svg_icon import get_default_cover
+            theme_dict = self._theme if self._theme else {}
+            self.art_label.setPixmap(get_default_cover(64, theme_dict, corner_radius=4.0))
             self.art_label.setText("")
             self.seek_bar.set_position(0.0, 0.0)
         else:
@@ -471,8 +473,9 @@ class BottomBar(QFrame):
             self._has_custom_art = True
         else:
             self._has_custom_art = False
-            color = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
-            self.art_label.setPixmap(svg_pixmap("disc", color, 64))
+            from ui.svg_icon import get_default_cover
+            theme_dict = self._theme if self._theme else {}
+            self.art_label.setPixmap(get_default_cover(64, theme_dict, corner_radius=4.0))
 
     def set_playing(self, is_playing: bool) -> None:
         self._is_playing = is_playing

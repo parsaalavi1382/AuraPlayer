@@ -357,13 +357,12 @@ class TrackHoverDelegate(QStyledItemDelegate):
             if pixmap:
                 painter.drawPixmap(cover_rect, pixmap)
             else:
-                painter.fillRect(cover_rect, bg_color)
-                font = QFont()
-                font.setPointSize(10)
-                font.setBold(True)
-                painter.setFont(font)
-                painter.setPen(text_color)
-                painter.drawText(cover_rect, Qt.AlignmentFlag.AlignCenter, "♪")
+                from ui.svg_icon import get_default_cover
+                disc_px = get_default_cover(cover_size, theme, corner_radius=4.0)
+                if disc_px and not disc_px.isNull():
+                    painter.drawPixmap(cover_rect, disc_px)
+                else:
+                    painter.fillRect(cover_rect, bg_color)
             painter.restore()
             
             # Dark overlay if playing or hovered

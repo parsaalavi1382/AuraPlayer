@@ -642,9 +642,9 @@ class PlayerScreen(QFrame):
             self._has_custom_art = True
         else:
             self._has_custom_art = False
-            color = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
-            disc_px = svg_pixmap("disc", color, _ART_SIZE)
-            self._art_label.setPixmap(disc_px)
+            from ui.svg_icon import get_default_cover
+            theme_dict = self._theme if self._theme else {}
+            self._art_label.setPixmap(get_default_cover(_ART_SIZE, theme_dict, corner_radius=16.0))
 
         # Load lyrics on track change
         self._lyrics_panel.load_track_lyrics(path or "")
@@ -763,8 +763,8 @@ class PlayerScreen(QFrame):
 
         # Re-render default art if no custom art is loaded
         if not getattr(self, "_has_custom_art", False):
-            disc_px = svg_pixmap("disc", text_secondary, _ART_SIZE)
-            self._art_label.setPixmap(disc_px)
+            from ui.svg_icon import get_default_cover
+            self._art_label.setPixmap(get_default_cover(_ART_SIZE, theme, corner_radius=16.0))
 
         # Update volume icon
         self._update_volume_icon()

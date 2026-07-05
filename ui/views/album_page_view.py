@@ -657,9 +657,10 @@ class AlbumPageView(QWidget):
             )
             self.art_label.setPixmap(scaled)
         else:
-            self.art_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.art_label.setFont(QFont("Segoe UI", 36))
-            self.art_label.setText("♪")
+            from ui.svg_icon import get_default_cover
+            self.art_label.setText("")
+            disc_px = get_default_cover(160, theme, corner_radius=12.0)
+            self.art_label.setPixmap(disc_px)
 
         header_layout.addWidget(self.art_label)
 

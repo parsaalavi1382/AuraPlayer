@@ -323,3 +323,41 @@ def clear_cache() -> None:
     changes so the next icon request re-renders in the new palette colors.
     """
     _CACHE.clear()
+
+
+def get_default_cover(size: int, theme: dict, corner_radius: float = 4.0) -> QPixmap:
+    """
+    Returns a beautiful, theme-adaptive default album cover QPixmap
+    with a solid background, rounded corners, and a centered disc/vinyl icon.
+    """
+    bg_color_str = theme.get("surface", "#1C1F26")
+    icon_color_str = theme.get("text_secondary", "#9AA0AC")
+    
+    # We can cache this as well to avoid drawing on every single paintEvent
+    cache_key = ("default_cover_gen", bg_color_str, icon_color_str, size, int(corner_radius))
+    if cache_key in _CACHE:
+        return _CACHE[cache_key]
+    
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+    # Draw rounded background
+    painter.setBrush(QColor(bg_color_str))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawRoundedRect(QRectF(0, 0, size, size), corner_radius, corner_radius)
+    
+    # Render the disc icon centered inside
+    disc_size = int(size * 0.55)
+    disc_size = max(16, min(disc_size, size - 4))
+    
+    disc_px = svg_pixmap("disc", icon_color_str, disc_size)
+    if disc_px and not disc_px.isNull():
+        offset = (size - disc_size) / 2.0
+        painter.drawPixmap(QRectF(offset, offset, disc_size, disc_size), disc_px, QRectF(disc_px.rect()))
+        
+    painter.end()
+    _CACHE[cache_key] = pixmap
+    return pixmap

@@ -178,6 +178,7 @@ class PlaybackEngine(QObject):
         if state.current_track_path and self.store.get_track(state.current_track_path):
             self._set_active_source(state.current_track_path)
             self._pending_restore_position = state.position_seconds
+            self._preload_standby()
         else:
             self._pending_restore_position = 0.0
 
@@ -775,6 +776,9 @@ class PlaybackEngine(QObject):
         duration_ms = self._active.duration()
         if duration_ms > 0:
             time_remaining = duration_ms - position_ms
+            if time_remaining <= GAPLESS_HANDOFF_LEAD_MS:
+                self._perform_gapless_handoff()
+                return
             
             # Dynamic lookahead scheduling
             next_index = self._compute_next_index(self._queue_index)
