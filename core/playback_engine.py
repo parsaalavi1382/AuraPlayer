@@ -71,8 +71,16 @@ class PlaybackEngine(QObject):
         self._active_output.setVolume(self._volume)
 
         # Restore the output device
-        if state.output_device_id:
+        self._use_default_device = True
+        if state.output_device_id and state.output_device_id != "default":
             self._restore_output_device(state.output_device_id)
+        else:
+            default_device = QMediaDevices.defaultAudioOutput()
+            self._active_output.setDevice(default_device)
+            self._standby_output.setDevice(default_device)
+
+        self._media_devices = QMediaDevices(self)
+        self._media_devices.audioOutputsChanged.connect(self._on_system_devices_changed)
 
         self._connect_active_signals()
 
@@ -158,7 +166,13 @@ class PlaybackEngine(QObject):
             if bytes(device.id()).decode("utf-8", errors="ignore") == device_id:
                 self._active_output.setDevice(device)
                 self._standby_output.setDevice(device)
+                self._use_default_device = False
                 return
+        # Fallback if device not found (e.g. unplugged)
+        self._use_default_device = True
+        default_device = QMediaDevices.defaultAudioOutput()
+        self._active_output.setDevice(default_device)
+        self._standby_output.setDevice(default_device)
 
     def _restore_initial_state(self, state) -> None:
         if state.current_track_path and self.store.get_track(state.current_track_path):
@@ -376,21 +390,43 @@ class PlaybackEngine(QObject):
     def get_volume(self) -> float:
         return self._volume
 
+    def is_using_default_device(self) -> bool:
+        return self._use_default_device
+
     def list_output_devices(self) -> list[QAudioDevice]:
         return list(QMediaDevices.audioOutputs())
 
-    def set_output_device(self, device: QAudioDevice) -> None:
-        self._active_output.setDevice(device)
-        self._standby_output.setDevice(device)
-        device_id = bytes(device.id()).decode("utf-8", errors="ignore")
-        self.store.cache.player_state.output_device_id = device_id
-        self.store.cache.save()
-        self.output_device_changed.emit(device.description())
+    def set_output_device(self, device: Optional[QAudioDevice]) -> None:
+        if device is None or device.isNull():
+            self._use_default_device = True
+            default_device = QMediaDevices.defaultAudioOutput()
+            self._active_output.setDevice(default_device)
+            self._standby_output.setDevice(default_device)
+            self.store.cache.player_state.output_device_id = "default"
+            self.store.cache.save()
+            self.output_device_changed.emit(default_device.description())
+        else:
+            self._use_default_device = False
+            self._active_output.setDevice(device)
+            self._standby_output.setDevice(device)
+            device_id = bytes(device.id()).decode("utf-8", errors="ignore")
+            self.store.cache.player_state.output_device_id = device_id
+            self.store.cache.save()
+            self.output_device_changed.emit(device.description())
 
     def current_output_device(self) -> QAudioDevice:
+        if self._use_default_device:
+            return QMediaDevices.defaultAudioOutput()
         if hasattr(self, '_active_output') and self._active_output:
             return self._active_output.device()
         return QMediaDevices.defaultAudioOutput()
+
+    def _on_system_devices_changed(self) -> None:
+        if self._use_default_device:
+            default_device = QMediaDevices.defaultAudioOutput()
+            self._active_output.setDevice(default_device)
+            self._standby_output.setDevice(default_device)
+            self.output_device_changed.emit(default_device.description())
 
     # ============================================================
     # Repeat / shuffle

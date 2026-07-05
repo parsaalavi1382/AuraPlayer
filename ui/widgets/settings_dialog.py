@@ -35,6 +35,13 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.store = store
         self.setWindowTitle("Settings")
+        
+        import os
+        from PyQt6.QtGui import QIcon
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "logo.png")
+        if os.path.exists(logo_path):
+            self.setWindowIcon(QIcon(logo_path))
+
         self.setMinimumSize(480, 480)
 
         layout = QVBoxLayout(self)

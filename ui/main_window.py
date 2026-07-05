@@ -52,6 +52,13 @@ class MainWindow(QMainWindow):
         self.store = store
         self.engine = PlaybackEngine(store)
         self.setWindowTitle("AuraPlayer")
+        
+        import os
+        from PyQt6.QtGui import QIcon
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "logo.png")
+        if os.path.exists(logo_path):
+            self.setWindowIcon(QIcon(logo_path))
+
         self.resize(1000, 680)
         self.setMinimumSize(_MIN_SIZE_NORMAL)
 
@@ -126,7 +133,7 @@ class MainWindow(QMainWindow):
         # --- Volume & Output Device Controls (wired to PlayerScreen & BottomBar) ---
         self.player_screen.set_volume(self.engine.get_volume())
         self.player_screen.set_available_devices(
-            self.engine.list_output_devices(), self.engine.current_output_device()
+            self.engine.list_output_devices(), self.engine.current_output_device(), self.engine.is_using_default_device()
         )
         self.player_screen.volume_changed.connect(self.engine.set_volume)
         self.player_screen.output_device_selected.connect(self.engine.set_output_device)
@@ -134,7 +141,7 @@ class MainWindow(QMainWindow):
 
         self.bottom_bar.set_volume(self.engine.get_volume())
         self.bottom_bar.set_available_devices(
-            self.engine.list_output_devices(), self.engine.current_output_device()
+            self.engine.list_output_devices(), self.engine.current_output_device(), self.engine.is_using_default_device()
         )
         self.bottom_bar.volume_changed.connect(self.engine.set_volume)
         self.bottom_bar.output_device_selected.connect(self.engine.set_output_device)
@@ -144,6 +151,7 @@ class MainWindow(QMainWindow):
         from PyQt6.QtMultimedia import QMediaDevices
         self._media_devices = QMediaDevices(self)
         self._media_devices.audioOutputsChanged.connect(self._on_audio_devices_changed)
+        self.engine.output_device_changed.connect(self._on_audio_devices_changed)
 
         # --- Apply initial theme (must happen before wiring icons) ---
         startup_theme_key = self.store.cache.settings.theme
@@ -519,8 +527,9 @@ class MainWindow(QMainWindow):
     def _on_audio_devices_changed(self) -> None:
         devices = self.engine.list_output_devices()
         current = self.engine.current_output_device()
-        self.player_screen.set_available_devices(devices, current)
-        self.bottom_bar.set_available_devices(devices, current)
+        is_default = self.engine.is_using_default_device()
+        self.player_screen.set_available_devices(devices, current, is_default)
+        self.bottom_bar.set_available_devices(devices, current, is_default)
 
     # ------------------------------------------------------------------
     # Player Screen open / close

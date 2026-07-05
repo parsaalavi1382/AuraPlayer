@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QAction
 from ui.widgets.clickable_label import ClickableLabel
 from ui.widgets.seek_bar import SeekBar
-from ui.svg_icon import svg_icon
+from ui.svg_icon import svg_icon, svg_pixmap
 
 from core.models import Track
 
@@ -61,7 +61,6 @@ class BottomBar(QFrame):
         self.art_label.setObjectName("bottomBarArt")
         self.art_label.setFixedSize(64, 64)
         self.art_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.art_label.setText("♪")
         main_layout.addWidget(self.art_label)
 
         # Track info (تغییر به QVBoxLayout برای زیر هم قرار گرفتن، اما با فاصله صفر)
@@ -220,6 +219,8 @@ class BottomBar(QFrame):
         self._devices: list[object] = []
         self._current_device: object | None = None
         self._queue_active = False
+        self._has_custom_art = False
+        self._is_default = True
 
     def _icon_btn(self, asset: str, size: int = _ICON_SIZE) -> QPushButton:
         btn = QPushButton()
@@ -246,6 +247,10 @@ class BottomBar(QFrame):
         self._update_toggle_styles()
         self._headphone_btn.setIcon(svg_icon("headphone", text_secondary, _ICON_SIZE))
         self._update_volume_icon()
+
+        # Re-render default art if no custom art is loaded
+        if not getattr(self, "_has_custom_art", False):
+            self.art_label.setPixmap(svg_pixmap("disc", text_secondary, 64))
 
         accent = theme.get("accent", "#6C5CE7")
         groove_bg = theme.get("border", "#2E323C")
@@ -329,14 +334,24 @@ class BottomBar(QFrame):
                 }}
             """)
 
+        from PyQt6.QtMultimedia import QMediaDevices
+        default_dev = QMediaDevices.defaultAudioOutput()
+        default_desc = default_dev.description() + " (default)"
+
+        default_action = QAction(default_desc, menu)
+        default_action.setCheckable(True)
+        if self._is_default:
+            default_action.setChecked(True)
+        default_action.triggered.connect(lambda checked: self.output_device_selected.emit(None))
+        menu.addAction(default_action)
+        menu.addSeparator()
+
         for device in self._devices:
             desc = device.description()
-            if device.isDefault():
-                desc += " (default)"
 
             action = QAction(desc, menu)
-            if self._current_device and bytes(device.id()) == bytes(self._current_device.id()):
-                action.setCheckable(True)
+            action.setCheckable(True)
+            if not self._is_default and self._current_device and bytes(device.id()) == bytes(self._current_device.id()):
                 action.setChecked(True)
 
             action.triggered.connect(lambda checked, d=device: self.output_device_selected.emit(d))
@@ -432,16 +447,19 @@ class BottomBar(QFrame):
         if track is None:
             self.title_label.setText("No track playing")
             self._clear_artist_layout()
-            self.art_label.setPixmap(QPixmap())
-            self.art_label.setText("♪")
+            self._has_custom_art = False
+            color = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
+            self.art_label.setPixmap(svg_pixmap("disc", color, 64))
+            self.art_label.setText("")
             self.seek_bar.set_position(0.0, 0.0)
         else:
             self.title_label.setText(track.title)
             self._populate_artists(track.artists)
-            self.art_label.setText("♪")
+            self.art_label.setText("")
 
     def set_art(self, pixmap: "QPixmap | None") -> None:
         """Set the album art thumbnail."""
+        self.art_label.setText("")
         if pixmap and not pixmap.isNull():
             # حفظ سایز جدید کاور (64x64)
             scaled = pixmap.scaled(
@@ -450,10 +468,11 @@ class BottomBar(QFrame):
                 Qt.TransformationMode.SmoothTransformation,
             )
             self.art_label.setPixmap(scaled)
-            self.art_label.setText("")
+            self._has_custom_art = True
         else:
-            self.art_label.setPixmap(QPixmap())
-            self.art_label.setText("♪")
+            self._has_custom_art = False
+            color = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
+            self.art_label.setPixmap(svg_pixmap("disc", color, 64))
 
     def set_playing(self, is_playing: bool) -> None:
         self._is_playing = is_playing
@@ -493,6 +512,7 @@ class BottomBar(QFrame):
         self._queue_btn.setChecked(active)
         self._update_toggle_styles()
 
-    def set_available_devices(self, devices: list[object], current: object | None) -> None:
+    def set_available_devices(self, devices: list[object], current: object | None, is_default: bool = True) -> None:
         self._devices = list(devices)
         self._current_device = current
+        self._is_default = is_default

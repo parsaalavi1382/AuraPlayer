@@ -129,12 +129,14 @@ class PlayerScreen(QFrame):
         self._duration = 0.0
         self._current_path: str | None = None
         self._art_pixmap: QPixmap | None = None
+        self._has_custom_art = False
 
         self._volume = 0.5
         self._muted = False
         self._prev_volume = 0.5
         self._devices: list[object] = []
         self._current_device: object | None = None
+        self._is_default = True
 
         self._build_ui()
 
@@ -469,14 +471,24 @@ class PlayerScreen(QFrame):
                 }}
             """)
 
+        from PyQt6.QtMultimedia import QMediaDevices
+        default_dev = QMediaDevices.defaultAudioOutput()
+        default_desc = default_dev.description() + " (default)"
+
+        default_action = QAction(default_desc, menu)
+        default_action.setCheckable(True)
+        if self._is_default:
+            default_action.setChecked(True)
+        default_action.triggered.connect(lambda checked: self.output_device_selected.emit(None))
+        menu.addAction(default_action)
+        menu.addSeparator()
+
         for device in self._devices:
             desc = device.description()
-            if device.isDefault():
-                desc += " (default)"
 
             action = QAction(desc, menu)
-            if self._current_device and bytes(device.id()) == bytes(self._current_device.id()):
-                action.setCheckable(True)
+            action.setCheckable(True)
+            if not self._is_default and self._current_device and bytes(device.id()) == bytes(self._current_device.id()):
                 action.setChecked(True)
 
             action.triggered.connect(lambda checked, d=device: self.output_device_selected.emit(d))
@@ -624,11 +636,15 @@ class PlayerScreen(QFrame):
         self._current_path = path
         self._title_label.setText(title)
         self._populate_artists(artists)
+        self._art_label.setText("")
         if art and not art.isNull():
             self._art_label.setPixmap(art)
+            self._has_custom_art = True
         else:
-            self._art_label.setPixmap(QPixmap())
-            self._art_label.setText("♪")
+            self._has_custom_art = False
+            color = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
+            disc_px = svg_pixmap("disc", color, _ART_SIZE)
+            self._art_label.setPixmap(disc_px)
 
         # Load lyrics on track change
         self._lyrics_panel.load_track_lyrics(path or "")
@@ -672,9 +688,10 @@ class PlayerScreen(QFrame):
 
         self._update_volume_icon()
 
-    def set_available_devices(self, devices: list[object], current: object | None) -> None:
+    def set_available_devices(self, devices: list[object], current: object | None, is_default: bool = True) -> None:
         self._devices = list(devices)
         self._current_device = current
+        self._is_default = is_default
 
     def _refresh_mode_icons(self) -> None:
         if not self._theme:
@@ -743,6 +760,11 @@ class PlayerScreen(QFrame):
 
         # Headphone icon
         self._headphone_btn.setIcon(svg_icon("headphone", text_secondary, _ICON_SIZE))
+
+        # Re-render default art if no custom art is loaded
+        if not getattr(self, "_has_custom_art", False):
+            disc_px = svg_pixmap("disc", text_secondary, _ART_SIZE)
+            self._art_label.setPixmap(disc_px)
 
         # Update volume icon
         self._update_volume_icon()

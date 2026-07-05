@@ -19,7 +19,7 @@ mean touching this same area twice.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QLabel
 
 
@@ -35,6 +35,19 @@ class TopBar(QFrame):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 0, 16, 0)
+        layout.setSpacing(8)
+
+        import os
+        from PyQt6.QtGui import QPixmap
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "logo.png")
+
+        self.logo_label = QLabel()
+        self.logo_label.setObjectName("topBarLogo")
+        if os.path.exists(logo_path):
+            pix = QPixmap(logo_path)
+            if not pix.isNull():
+                self.logo_label.setPixmap(pix.scaled(36, 36, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        layout.addWidget(self.logo_label)
 
         title = QLabel("AuraPlayer")
         title.setStyleSheet("font-size: 15px; font-weight: 700;")

@@ -40,6 +40,13 @@ class AlbumEditorDialog(QDialog):
         first_track = self.tracks[0] if self.tracks else None
         album_name = first_track.album if first_track else "Unknown Album"
         self.setWindowTitle(f"Edit Album Metadata — {album_name}")
+        
+        import os
+        from PyQt6.QtGui import QIcon
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "logo.png")
+        if os.path.exists(logo_path):
+            self.setWindowIcon(QIcon(logo_path))
+
         self.setMinimumSize(560, 520)
         self.resize(580, 560)
 
@@ -81,13 +88,9 @@ class AlbumEditorDialog(QDialog):
                 )
                 self.cover_label.setPixmap(scaled)
             else:
-                self.cover_label.setText("♪")
-                self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.cover_label.setFont(QFont("Segoe UI", 48))
+                self.cover_label.setPixmap(svg_pixmap("disc", theme.get("text_secondary", "#8b949e"), 160))
         else:
-            self.cover_label.setText("♪")
-            self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.cover_label.setFont(QFont("Segoe UI", 48))
+            self.cover_label.setPixmap(svg_pixmap("disc", theme.get("text_secondary", "#8b949e"), 160))
 
         left_layout.addWidget(self.cover_label)
 
