@@ -275,9 +275,9 @@ class LyricsEditorDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"Edit Lyrics — {track_title}")
         
-        import os
+        from utils.paths import get_resource_path
         from PyQt6.QtGui import QIcon
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "logo.png")
+        logo_path = get_resource_path("assets", "logo.png")
         if os.path.exists(logo_path):
             self.setWindowIcon(QIcon(logo_path))
 

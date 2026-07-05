@@ -1,3 +1,4 @@
 PyQt6>=6.7
 mutagen>=1.47
-miniaudio>=1.40
+pyinstaller>=6.0
+pillow>=10.0

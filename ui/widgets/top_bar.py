@@ -38,8 +38,9 @@ class TopBar(QFrame):
         layout.setSpacing(8)
 
         import os
+        from utils.paths import get_resource_path
         from PyQt6.QtGui import QPixmap
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "logo.png")
+        logo_path = get_resource_path("assets", "logo.png")
 
         self.logo_label = QLabel()
         self.logo_label.setObjectName("topBarLogo")

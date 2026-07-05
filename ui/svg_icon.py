@@ -28,7 +28,8 @@ from PyQt6.QtSvg import QSvgRenderer
 # ---------------------------------------------------------------------------
 # Asset root — everything resolves relative to this
 # ---------------------------------------------------------------------------
-_ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+from utils.paths import get_resource_path
+_ASSETS_DIR = get_resource_path("assets")
 
 # Cache: (asset_name_or_key, hex_color, size_px) -> QPixmap
 _CACHE: dict[tuple[str, str, int], QPixmap] = {}

@@ -11,3 +11,7 @@ test_music/
 .music-sync.json
 
 .run.bat
+
+build/
+dist/
+.vscode/
