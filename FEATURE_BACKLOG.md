@@ -44,6 +44,8 @@ This feature displays the track's album cover thumbnail on the left side of the 
 - **State C - Current song is PAUSED + No Hover:**
   - Show the album cover in normal state (full brightness, no overlay)
 
+- **Professional Vector Fallback (No Emoji):** Completely replaced the legacy text/emoji fallback ("♪") with a highly polished, theme-adaptive `disc.svg` vector image dynamically rendered using the active theme's text colors. This clean vector design has also been applied uniformly across all other tabs and screens in the application (AlbumsView, AlbumPageView, ArtistPageView, QueuePanel, BottomBar, PlayerScreen, and metadata editors) to completely eliminate emojis from default album covers.
+
 ## 5. Lyrics panel — Edit Lyrics button
 **Status:** ✅ COMPLETED
 

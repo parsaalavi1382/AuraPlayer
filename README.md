@@ -30,8 +30,8 @@ AuraPlayer is **currently in progress and is not yet fully completed**. Core pla
 * **Smart Closable Tabs:** Dynamically opened pages can be closed with an "X" button, while permanent main navigation tabs (Tracks, Artists, Genres, Albums, Playlists) are securely locked in place.
 * **Underlined Hover Feedback:** Hovering over artist or album names anywhere in the app displays elegant underlines with pointing-hand feedback; clicking them takes you directly to their dedicated pages.
 
-### 2. Cover Art with Active Playback States in Tracks List
-* Displays high-quality album covers or beautiful theme-matching fallbacks.
+### 2. Cover Art with Active Playback States & Vector Placeholders
+* Displays high-quality album covers or beautiful, theme-adaptive vector placeholders (using `disc.svg` dynamically colored by the active theme, completely removing raw emojis or text-character fallback icons).
 * **State A (PLAYING):** Cover art dims slightly and displays a beautiful, pulsing 3-bar animated equalizer.
 * **State B (PAUSED + HOVER):** Cover art dims and displays an overlaid "▶" play icon.
 * **State C (PAUSED + NO HOVER):** Cover art renders at full brightness with no overlays.

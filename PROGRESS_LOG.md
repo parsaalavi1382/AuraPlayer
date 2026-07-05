@@ -296,3 +296,10 @@
     - **State C - Current song is PAUSED + No Hover:** Show the album cover at normal brightness.
   - Added a dynamic repaint loop driven by an animation timer when tracks are active, making the equalizer visually pulse smoothly like a professional audio visualizer.
 
+- **Unified Vector Disc Placeholders (No Emojis)** (completed 2026-07-05): ✅ Done.
+  Completely cleaned and modernized the default album cover and track placeholders across the entire application:
+  - Replaced all raw text/emoji fallback placeholders (like "♪" and "🎵") with a high-fidelity vector `disc.svg` via `svg_pixmap("disc", ...)`.
+  - The vector placeholder renders dynamically with theme-adaptive colors based on the active style (e.g. `text_secondary` or custom panel highlights).
+  - Applied this clean aesthetic uniformly to the **Tracks Table**, **Albums Grid**, **Album Page**, **Artist Page**, **Play Queue Side Panel**, **Bottom Mini-Player Bar**, **Full Player Screen**, and the **Album & Metadata Editor Dialogs**.
+  - Updated the bottom bar view's default layout when no track is selected or playing to seamlessly show the styled vector disc fallback in the correct theme color.
+
