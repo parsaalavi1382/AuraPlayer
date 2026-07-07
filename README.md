@@ -13,12 +13,14 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ---
 
-🚀 Pre-Release Binaries & Cross-Platform Testing Help Needed!
-A pre-release version of AuraPlayer is now available at **[Download Pre-release version](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/v1.0.0-beta)**. 
+### 🚀 Pre-Release Binaries & Cross-Platform Testing Help Needed!
 
-Windows: Fully packaged and verified using Inno Setup (installer.iss). It works perfectly.
+I have officially published a **Pre-Release version** with compiled binaries for **Windows, macOS, and Linux**.
 
-macOS & Linux: The build pipelines are configured via GitHub Actions (release.yml), but since I do not have physical access to a Mac or Linux machine to properly test the environment hooks, I need your help!
+* **Windows:** Fully packaged and verified using Inno Setup (`installer.iss`). It works perfectly.
+* **macOS & Linux:** The build pipelines are configured via GitHub Actions (`release.yml`), but since I do not have physical access to a Mac or Linux machine to properly test the environment hooks, **I need your help!**
+
+If you are on macOS or Linux, I would deeply appreciate it if you could download the pre-release, run it, and let me know how it handles native audio output, fonts, and window framing.
 
 ---
 
