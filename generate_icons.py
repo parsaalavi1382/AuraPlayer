@@ -41,7 +41,7 @@ def generate_icons():
     print("Generating multi-layer logo.ico (Windows)...")
     # ICO supports standard sizes: 16x16, 32x32, 48x48, 64x64, 128x128, 256x256
     ico_sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-    img.save(ico_path, format='ICO', sizes=ico_sizes, bitmap_format='bmp')
+    img.save(ico_path, format='ICO', sizes=ico_sizes)
     print(f"Successfully saved high-quality multi-layer ICO to: {ico_path}")
 
     print("Generating multi-layer logo.icns (macOS)...")
