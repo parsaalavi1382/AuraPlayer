@@ -9,8 +9,7 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 ---
 
 ## 📺 Demo
-<img width="720" height="382" alt="AuraPlayer" src="https://github.com/user-attachments/assets/b54e37da-e130-44bf-a5ef-1d80b699a39d" />
-
+<img width="720" height="381" alt="Auraplayer" src="https://github.com/user-attachments/assets/6f878e95-775b-4293-b667-7e8f9ca9765b" />
 
 ---
 
