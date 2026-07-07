@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=AuraPlayer
+Comment=A dynamic, beautiful, gapless desktop music player
+Exec=sh -c "cd $(dirname %k) && ./AuraPlayer"
+Icon=assets/logo.png
+Terminal=false
+Type=Application
+Categories=AudioVideo;Player;Qt;
+Keywords=Music;Player;Audio;Gapless;Aura;
+StartupWMClass=AuraPlayer

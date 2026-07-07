@@ -85,9 +85,11 @@ jobs:
       - name: Package Release Assets (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          # macOS outputs standard single-folder or app bundle
-          # Zip the main build output folder
-          zip -r ${{ matrix.artifact_name }} dist/AuraPlayer
+          # macOS outputs a native app bundle when BUNDLE is specified
+          # Zip the main AuraPlayer.app bundle for macOS users
+          cd dist
+          zip -r ../${{ matrix.artifact_name }} AuraPlayer.app
+          cd ..
 
       - name: Package Release Assets (Linux)
         if: matrix.os == 'ubuntu-22.04'

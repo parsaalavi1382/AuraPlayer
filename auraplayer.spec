@@ -98,3 +98,15 @@ coll = COLLECT(
     upx_exclude=[],
     name='AuraPlayer',
 )
+
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        coll,
+        name='AuraPlayer.app',
+        icon=icns_path,
+        bundle_identifier='com.parsaalavi.auraplayer',
+        info_plist={
+            'NSHighResolutionCapable': 'True',
+            'LSBackgroundOnly': 'False',
+        }
+    )
