@@ -54,11 +54,34 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("AuraPlayer")
         
         import os
+        import sys
         from utils.paths import get_resource_path
+        # For PySide6, simply use: from PySide6.QtGui import QIcon
         from PyQt6.QtGui import QIcon
-        logo_path = get_resource_path("assets", "logo.png")
-        if os.path.exists(logo_path):
-            self.setWindowIcon(QIcon(logo_path))
+        
+        # Windows taskbar icon fix: prevent grouping with python.exe and load distinct icon
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                myappid = 'parsaalavi.auraplayer.musicplayer.1.0'
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+            except Exception:
+                pass
+
+        # Multi-size high-resolution icon registration for crisp rendering on High-DPI/4K screens
+        icon = QIcon()
+        ico_path = get_resource_path("assets", "logo.ico")
+        icns_path = get_resource_path("assets", "logo.icns")
+        png_path = get_resource_path("assets", "logo.png")
+        
+        if sys.platform == "win32" and os.path.exists(ico_path):
+            icon = QIcon(ico_path)
+        elif sys.platform == "darwin" and os.path.exists(icns_path):
+            icon = QIcon(icns_path)
+        elif os.path.exists(png_path):
+            icon = QIcon(png_path)
+            
+        self.setWindowIcon(icon)
 
         self.resize(1000, 680)
         self.setMinimumSize(_MIN_SIZE_NORMAL)

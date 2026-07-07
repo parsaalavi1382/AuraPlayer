@@ -57,10 +57,16 @@ a.binaries = [x for x in a.binaries if os.path.basename(x[0]).lower() not in exc
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# Check if an ICO file exists, otherwise fall back to the PNG logo (PyInstaller automatically converts PNG on some platforms)
-icon_path = os.path.join(project_dir, 'assets', 'logo.png')
-if os.path.exists(os.path.join(project_dir, 'assets', 'logo.ico')):
-    icon_path = os.path.join(project_dir, 'assets', 'logo.ico')
+# Dynamically switch the icon path based on the compilation platform
+ico_path = os.path.join(project_dir, 'assets', 'logo.ico')
+icns_path = os.path.join(project_dir, 'assets', 'logo.icns')
+png_path = os.path.join(project_dir, 'assets', 'logo.png')
+
+icon_path = png_path
+if sys.platform == 'win32' and os.path.exists(ico_path):
+    icon_path = ico_path
+elif sys.platform == 'darwin' and os.path.exists(icns_path):
+    icon_path = icns_path
 
 # Standard setup for a Single-Folder Distribution (Highly recommended for PyQt apps for fast startup)
 exe = EXE(
