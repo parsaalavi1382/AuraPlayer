@@ -40,7 +40,19 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1-mesa libgl1-mesa-glx libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libdbus-1-3
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 \
+            libgl1 \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xfixes0 \
+            libdbus-1-3 || true
 
       - name: Install Python Dependencies
         run: |
@@ -68,20 +80,20 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           # Compress the portable single-folder build
-          Compress-Archive -Path dist\auraplayer -DestinationPath ${{ matrix.artifact_name }}
+          Compress-Archive -Path dist\AuraPlayer -DestinationPath ${{ matrix.artifact_name }}
 
       - name: Package Release Assets (macOS)
         if: matrix.os == 'macos-latest'
         run: |
           # macOS outputs standard single-folder or app bundle
           # Zip the main build output folder
-          zip -r ${{ matrix.artifact_name }} dist/auraplayer
+          zip -r ${{ matrix.artifact_name }} dist/AuraPlayer
 
       - name: Package Release Assets (Linux)
         if: matrix.os == 'ubuntu-22.04'
         run: |
           # Tar/Gzip the Linux build folder
-          tar -czf ${{ matrix.artifact_name }} -C dist auraplayer
+          tar -czf ${{ matrix.artifact_name }} -C dist AuraPlayer
 
       # Release Phase
       - name: Upload Release Binaries

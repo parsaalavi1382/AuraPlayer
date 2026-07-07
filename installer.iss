@@ -34,8 +34,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Copy the main executable and all bundled files from the PyInstaller dist directory
-Source: "dist\auraplayer\AuraPlayer.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\auraplayer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\AuraPlayer\AuraPlayer.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\AuraPlayer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
