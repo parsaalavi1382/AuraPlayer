@@ -228,6 +228,11 @@ class LibraryStore(QObject):
             idx = max(0, min(at_index, len(pl.track_paths)))
             for path in reversed(to_add):
                 pl.track_paths.insert(idx, path)
+        
+        for path in to_add:
+            if path not in pl.added_track_paths:
+                pl.added_track_paths.append(path)
+                
         self.cache.save()
         self.playlists_changed.emit(playlist_id)
 
@@ -237,15 +242,20 @@ class LibraryStore(QObject):
             return
         if track_path in pl.track_paths:
             pl.track_paths.remove(track_path)
-            self.cache.save()
-            self.playlists_changed.emit(playlist_id)
+        if track_path in pl.added_track_paths:
+            pl.added_track_paths.remove(track_path)
+        self.cache.save()
+        self.playlists_changed.emit(playlist_id)
 
     def remove_track_from_playlist_by_index(self, playlist_id: str, index: int) -> None:
         pl = self.cache.playlists.get(playlist_id)
         if not pl:
             return
         if 0 <= index < len(pl.track_paths):
-            pl.track_paths.pop(index)
+            removed_path = pl.track_paths.pop(index)
+            if removed_path not in pl.track_paths:
+                if removed_path in pl.added_track_paths:
+                    pl.added_track_paths.remove(removed_path)
             self.cache.save()
             self.playlists_changed.emit(playlist_id)
 

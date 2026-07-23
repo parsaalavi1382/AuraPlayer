@@ -82,6 +82,7 @@ class Playlist:
     name: str
     cover_path: Optional[str] = None   # user-selected image, not from a track
     track_paths: list[str] = field(default_factory=list)
+    added_track_paths: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -89,7 +90,11 @@ class Playlist:
     @staticmethod
     def from_dict(d: dict) -> "Playlist":
         known = {f for f in Playlist.__dataclass_fields__}
-        return Playlist(**{k: v for k, v in d.items() if k in known})
+        pl = Playlist(**{k: v for k, v in d.items() if k in known})
+        if not pl.added_track_paths and pl.track_paths:
+            pl.added_track_paths = list(pl.track_paths)
+        return pl
+
 
 
 @dataclass

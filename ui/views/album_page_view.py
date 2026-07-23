@@ -192,13 +192,24 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         col = index.column()
         if col not in (COL_TRACK_NO, COL_TITLE, COL_ARTISTS, COL_GENRE):
-            super().paint(painter, option, index)
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            if index.row() == getattr(self, 'hovered_row', -1):
+                opt.state |= QStyle.StateFlag.State_MouseOver
+            else:
+                opt.state &= ~QStyle.StateFlag.State_MouseOver
+            super().paint(painter, opt, index)
             return
 
         # Prepare style option
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         opt.text = ""
+
+        if index.row() == getattr(self, 'hovered_row', -1):
+            opt.state |= QStyle.StateFlag.State_MouseOver
+        else:
+            opt.state &= ~QStyle.StateFlag.State_MouseOver
 
         widget = option.widget
         style = widget.style() if widget else None
@@ -426,6 +437,45 @@ class AlbumHoverEventFilter(QObject):
         self.table = table
         self.delegate = delegate
         self.view = view
+        self.table.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        
+    def _on_scroll(self):
+        try:
+            if not self.table or self.table.isHidden():
+                return
+            from PyQt6.QtGui import QCursor
+            pos = self.table.viewport().mapFromGlobal(QCursor.pos())
+            self._update_hover(pos)
+        except RuntimeError:
+            pass
+            
+    def _update_hover(self, pos):
+        self.delegate.set_mouse_pos(pos)
+        index = self.table.indexAt(pos)
+        if index.isValid():
+            self.delegate.hovered_row = index.row()
+            col = index.column()
+            if col == COL_ARTISTS:
+                clicked_artist = self.delegate.get_artist_at_pos(index, pos)
+                if clicked_artist:
+                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                else:
+                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
+            elif col == COL_GENRE:
+                clicked_genre = self.delegate.get_genre_at_pos(index, pos)
+                if clicked_genre:
+                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                else:
+                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
+            elif col == COL_TRACK_NO:
+                self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.table.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            self.delegate.hovered_row = -1
+            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+
+        self.table.viewport().update()
 
     def eventFilter(self, obj, event):
         try:
@@ -437,34 +487,7 @@ class AlbumHoverEventFilter(QObject):
             return False
 
         if event.type() == QEvent.Type.MouseMove:
-            pos = event.position().toPoint()
-            self.delegate.set_mouse_pos(pos)
-
-            index = self.table.indexAt(pos)
-            if index.isValid():
-                self.delegate.hovered_row = index.row()
-                col = index.column()
-                if col == COL_ARTISTS:
-                    clicked_artist = self.delegate.get_artist_at_pos(index, pos)
-                    if clicked_artist:
-                        self.table.setCursor(Qt.CursorShape.PointingHandCursor)
-                    else:
-                        self.table.setCursor(Qt.CursorShape.ArrowCursor)
-                elif col == COL_GENRE:
-                    clicked_genre = self.delegate.get_genre_at_pos(index, pos)
-                    if clicked_genre:
-                        self.table.setCursor(Qt.CursorShape.PointingHandCursor)
-                    else:
-                        self.table.setCursor(Qt.CursorShape.ArrowCursor)
-                elif col == COL_TRACK_NO:
-                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
-                else:
-                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
-            else:
-                self.delegate.hovered_row = -1
-                self.table.setCursor(Qt.CursorShape.ArrowCursor)
-
-            self.table.viewport().update()
+            self._update_hover(event.position().toPoint())
 
         elif event.type() == QEvent.Type.Leave:
             self.delegate.clear_mouse_pos()
@@ -789,7 +812,7 @@ class AlbumPageView(QWidget):
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             table.verticalHeader().setVisible(False)
             table.verticalHeader().setDefaultSectionSize(36)
-            table.setShowGrid(True)
+            table.setShowGrid(False)
 
             table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
             table.horizontalHeader().setStretchLastSection(False)

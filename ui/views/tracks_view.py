@@ -33,7 +33,7 @@ import time
 
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect, QEvent, QObject, QTimer, QRectF
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableView, QPushButton, QMenu,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableView, QPushButton, QMenu,
     QHeaderView, QStackedWidget, QMessageBox, QAbstractItemView,
     QStyledItemDelegate, QStyle, QStyleOptionViewItem,
 )
@@ -65,12 +65,17 @@ class TracksView(QWidget):
 
         # --- Shuffle / Play All row ---
         action_row = QHBoxLayout()
+        self.stats_lbl = QLabel("")
+        action_row.addWidget(self.stats_lbl)
+        action_row.addStretch()
+
         self.play_all_btn = QPushButton("▶  Play All")
         self.play_all_btn.setObjectName("accentButton")
+        self.play_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.shuffle_btn = QPushButton("🔀  Shuffle")
+        self.shuffle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         action_row.addWidget(self.play_all_btn)
         action_row.addWidget(self.shuffle_btn)
-        action_row.addStretch()
         outer.addLayout(action_row)
 
         self.play_all_btn.clicked.connect(lambda: self._play_all(shuffle=False))
@@ -97,7 +102,7 @@ class TracksView(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(40) # Comfortable row height for album art
-        self.table.setShowGrid(True)
+        self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.setColumnWidth(COL_TITLE, 250)
@@ -154,11 +159,19 @@ class TracksView(QWidget):
     # ---------- Data refresh ----------
 
     def refresh(self) -> None:
+        from ui.theme import THEMES, DEFAULT_THEME
+        theme_key = self.store.cache.settings.theme if self.store and hasattr(self.store, 'cache') else "dark"
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        self.stats_lbl.setStyleSheet(f"color: {theme['text_secondary']}; font-size: 13px; font-weight: normal; background: transparent;")
+
         tracks = self.store.all_tracks()
         if not tracks:
+            self.stats_lbl.setText("")
             self.stack.setCurrentWidget(self.empty_widget)
             return
         self.stack.setCurrentWidget(self.table)
+        count = len(tracks)
+        self.stats_lbl.setText(f"{count} track{'s' if count != 1 else ''}")
         self.model.set_tracks(tracks)
         sort_col = getattr(self.model, "_sort_column", COL_TITLE)
         sort_asc = getattr(self.model, "_sort_ascending", True)
@@ -344,7 +357,13 @@ class TrackHoverDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         col = index.column()
         if col not in (COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_GENRE):
-            super().paint(painter, option, index)
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            if index.row() == getattr(self, 'hovered_row', -1):
+                opt.state |= QStyle.StateFlag.State_MouseOver
+            else:
+                opt.state &= ~QStyle.StateFlag.State_MouseOver
+            super().paint(painter, opt, index)
             return
 
         from ui.theme import THEMES, DEFAULT_THEME
@@ -356,6 +375,11 @@ class TrackHoverDelegate(QStyledItemDelegate):
             opt = QStyleOptionViewItem(option)
             self.initStyleOption(opt, index)
             opt.text = "" # Clear text so PE_PanelItemViewItem doesn't draw it
+            
+            if index.row() == self.hovered_row:
+                opt.state |= QStyle.StateFlag.State_MouseOver
+            else:
+                opt.state &= ~QStyle.StateFlag.State_MouseOver
             
             widget = option.widget
             style = widget.style() if widget else None
@@ -505,6 +529,11 @@ class TrackHoverDelegate(QStyledItemDelegate):
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         opt.text = "" # Clear the text so it doesn't paint twice
+        
+        if index.row() == self.hovered_row:
+            opt.state |= QStyle.StateFlag.State_MouseOver
+        else:
+            opt.state &= ~QStyle.StateFlag.State_MouseOver
         
         # Draw standard background/selection/etc. using primitive panel drawing instead of super().paint()
         # This prevents the base implementation from calling initStyleOption internally and re-drawing the text
@@ -798,7 +827,39 @@ class HoverEventFilter(QObject):
         self.table = table
         self.delegate = delegate
         self.view = view
+        self.table.verticalScrollBar().valueChanged.connect(self._on_scroll)
         
+    def _on_scroll(self):
+        try:
+            if not self.table or self.table.isHidden():
+                return
+            from PyQt6.QtGui import QCursor
+            pos = self.table.viewport().mapFromGlobal(QCursor.pos())
+            self._update_hover(pos)
+        except RuntimeError:
+            pass
+            
+    def _update_hover(self, pos):
+        self.delegate.set_mouse_pos(pos)
+        index = self.table.indexAt(pos)
+        if index.isValid():
+            self.delegate.hovered_row = index.row()
+            col = index.column()
+            if col in (COL_ARTISTS, COL_ALBUM, COL_GENRE):
+                if self.delegate.is_over_clickable_text(index, pos):
+                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                else:
+                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
+            elif col == COL_TITLE and hasattr(self.delegate, "is_over_album_cover") and self.delegate.is_over_album_cover(index, pos):
+                self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.table.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            self.delegate.hovered_row = -1
+            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+            
+        self.table.viewport().update()
+
     def eventFilter(self, obj, event):
         try:
             if not self.table or self.table.isHidden():
@@ -808,27 +869,7 @@ class HoverEventFilter(QObject):
             return False
             
         if event.type() == QEvent.Type.MouseMove:
-            pos = event.position().toPoint()
-            self.delegate.set_mouse_pos(pos)
-            
-            index = self.table.indexAt(pos)
-            if index.isValid():
-                self.delegate.hovered_row = index.row()
-                col = index.column()
-                if col in (COL_ARTISTS, COL_ALBUM, COL_GENRE):
-                    if self.delegate.is_over_clickable_text(index, pos):
-                        self.table.setCursor(Qt.CursorShape.PointingHandCursor)
-                    else:
-                        self.table.setCursor(Qt.CursorShape.ArrowCursor)
-                elif col == COL_TITLE and hasattr(self.delegate, "is_over_album_cover") and self.delegate.is_over_album_cover(index, pos):
-                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
-                else:
-                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
-            else:
-                self.delegate.hovered_row = -1
-                self.table.setCursor(Qt.CursorShape.ArrowCursor)
-                
-            self.table.viewport().update()
+            self._update_hover(event.position().toPoint())
                 
         elif event.type() == QEvent.Type.Leave:
             self.delegate.clear_mouse_pos()

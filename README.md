@@ -79,9 +79,16 @@ Please note that this project is **currently in progress and is not yet fully co
 * **Karaoke-Style Lyrics Highlight:** Renders plain text or synced lyrics (`.lrc`, `.txt`, and embedded tags) with smooth vertical scrolling and live karaoke-style line highlighting matching current playback.
 * **Manual Scroll Recovery (Sync):** If you scroll away manually to read ahead, a floating "Sync" button appears; clicking it slides the viewport back to the playing lyric smoothly.
 * **In-App Offline Lyrics Editor:** Includes a full-height, code-styled editing dialog to write, paste, or format lyrics, saving directly back to disk or embedded tags.
-* **Slide-out Queue Side-Panel:** A reusable panel that slides out smoothly from the right in both the full Player Screen and the Main Window (triggered by the new 📋 Queue button). Both views stay in perfect synchronization.
-* **Drag-and-Drop Queue Reordering:** Rearrange tracks in the queue list using standard drag-and-drop rows, which immediately notifies and updates the playback engine's queue order.
+* **Slide-out Queue Side-Panel:** A reusable panel that slides out smoothly from the right in both the full Player Screen and the Main Window (triggered by the 📋 Queue button). Both views stay in perfect synchronization.
+* **Add Tracks to Queue from Any View:** Seamlessly append or add tracks to the playback queue from any tab or page featuring a track list (Tracks view, Album page, Artist page, Genre page, or Playlist page).
+* **Drag-and-Drop Queue Reordering:** Rearrange tracks inside the queue list using standard drag-and-drop rows, which immediately updates the playback engine's queue order.
 * **Full Queue Context Controls:** Right-click queue tracks to trigger "Play Now" or "Remove", use the `Delete` key to clear tracks, or wipe the entire queue via the flat "Clear Queue" button.
+
+### 7. Playlists System, Custom Cover Art & Drag-and-Drop Integration
+* **Smart & Custom Playlists:** Features automated Smart Playlists (*Favorites*, *Recently Added*, *Recently Played*, *Most Played*) alongside full support for creating, renaming, and deleting Custom Playlists.
+* **Custom Playlist Cover Art & Smart Collage Fallback:** Custom playlists support setting a custom cover image. If no custom image is assigned, AuraPlayer automatically generates a beautiful default cover collage using the artwork from the first 4 unique albums added to that playlist (ordered by addition date). If tracks are deleted or modified, the collage dynamically cascades to display the next available album artwork.
+* **Drag-and-Drop from Queue to Playlists:** Drag songs directly out of the Queue side-panel and drop them onto any custom playlist or smart playlist card (such as *Favorites*) to add them instantly.
+* **Comprehensive Drag-and-Drop Support:** Drag tracks from any track list view (Tracks, Albums, Artists, Genres, or Playlists) and drop them onto custom playlists or smart playlist cards to build playlists effortlessly.
 
 ---
 

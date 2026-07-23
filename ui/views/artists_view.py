@@ -5,9 +5,11 @@ Clicking an artist navigates to that Artist Page (built in Step 5).
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QObject, QEvent
+from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTableView, QStackedWidget, QHeaderView, QAbstractItemView,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle
 )
 
 from core.library_store import LibraryStore
@@ -96,12 +98,19 @@ class ArtistsView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.setShowGrid(True)
+        self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.setColumnWidth(0, 450)
         self.table.setColumnWidth(1, 100)
         self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader())
+        
+        self.delegate = SimpleRowHoverDelegate(self.table)
+        self.table.setItemDelegate(self.delegate)
+        self.table.setMouseTracking(True)
+        self.hover_filter = SimpleRowHoverFilter(self.table, self.delegate)
+        self.table.viewport().installEventFilter(self.hover_filter)
+        
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_double_clicked)
         self.stack.addWidget(self.table)
@@ -138,3 +147,63 @@ class ArtistsView(QWidget):
         artist = self.base_model.artist_at(index.row())
         if artist:
             self.artist_selected.emit(artist.name)
+
+
+class SimpleRowHoverDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.hovered_row = -1
+
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        if index.row() == self.hovered_row:
+            opt.state |= QStyle.StateFlag.State_MouseOver
+        else:
+            opt.state &= ~QStyle.StateFlag.State_MouseOver
+        super().paint(painter, opt, index)
+
+
+class SimpleRowHoverFilter(QObject):
+    def __init__(self, table, delegate):
+        super().__init__(table)
+        self.table = table
+        self.delegate = delegate
+        self.table.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        
+    def _on_scroll(self):
+        try:
+            if not self.table or self.table.isHidden():
+                return
+            pos = self.table.viewport().mapFromGlobal(QCursor.pos())
+            self._update_hover(pos)
+        except RuntimeError:
+            pass
+            
+    def _update_hover(self, pos):
+        index = self.table.indexAt(pos)
+        if index.isValid():
+            self.delegate.hovered_row = index.row()
+            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            self.delegate.hovered_row = -1
+            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+        if self.table and self.table.viewport():
+            self.table.viewport().update()
+
+    def eventFilter(self, obj, event):
+        try:
+            if not self.table or self.table.isHidden():
+                return False
+            _ = self.table.viewport()
+        except RuntimeError:
+            return False
+
+        if event.type() == QEvent.Type.MouseMove:
+            self._update_hover(event.position().toPoint())
+        elif event.type() == QEvent.Type.Leave:
+            self.delegate.hovered_row = -1
+            if self.table and self.table.viewport():
+                self.table.viewport().update()
+                
+        return super().eventFilter(obj, event)

@@ -257,12 +257,23 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         col = index.column()
         if col not in (COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_GENRE, COL_DURATION):
-            super().paint(painter, option, index)
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            if index.row() == getattr(self, 'hovered_row', -1):
+                opt.state |= QStyle.StateFlag.State_MouseOver
+            else:
+                opt.state &= ~QStyle.StateFlag.State_MouseOver
+            super().paint(painter, opt, index)
             return
 
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         opt.text = ""
+
+        if index.row() == getattr(self, 'hovered_row', -1):
+            opt.state |= QStyle.StateFlag.State_MouseOver
+        else:
+            opt.state &= ~QStyle.StateFlag.State_MouseOver
 
         widget = option.widget
         style = widget.style() if widget else None
@@ -551,6 +562,39 @@ class PlaylistHoverEventFilter(QObject):
         self.table = table
         self.delegate = delegate
         self.view = view
+        self.table.verticalScrollBar().valueChanged.connect(self._on_scroll)
+        
+    def _on_scroll(self):
+        try:
+            if not self.table or self.table.isHidden():
+                return
+            from PyQt6.QtGui import QCursor
+            pos = self.table.viewport().mapFromGlobal(QCursor.pos())
+            self._update_hover(pos)
+        except RuntimeError:
+            pass
+            
+    def _update_hover(self, pos):
+        self.delegate.set_mouse_pos(pos)
+        index = self.table.indexAt(pos)
+        if index.isValid():
+            self.delegate.hovered_row = index.row()
+            col = index.column()
+            if col in (COL_ARTISTS, COL_ALBUM, COL_GENRE):
+                if self.delegate.is_over_clickable_text(index, pos):
+                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                else:
+                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
+            elif col == COL_TITLE and self.delegate.is_over_album_cover(index, pos):
+                self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.table.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            self.delegate.hovered_row = -1
+            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+
+        if self.table and self.table.viewport():
+            self.table.viewport().update()
 
     def eventFilter(self, obj, event):
         try:
@@ -562,30 +606,9 @@ class PlaylistHoverEventFilter(QObject):
                 return False
 
             if event.type() == QEvent.Type.MouseMove:
-                pos = event.position().toPoint()
-                self.delegate.set_mouse_pos(pos)
-
                 # Ensure mouseMoveEvent is passed to table for dragging
                 self.table.mouseMoveEvent(event)
-
-                index = self.table.indexAt(pos)
-                if index.isValid():
-                    self.delegate.hovered_row = index.row()
-                    col = index.column()
-                    if col in (COL_ARTISTS, COL_ALBUM, COL_GENRE):
-                        if self.delegate.is_over_clickable_text(index, pos):
-                            self.table.setCursor(Qt.CursorShape.PointingHandCursor)
-                        else:
-                            self.table.setCursor(Qt.CursorShape.ArrowCursor)
-                    elif col == COL_TITLE and self.delegate.is_over_album_cover(index, pos):
-                        self.table.setCursor(Qt.CursorShape.PointingHandCursor)
-                    else:
-                        self.table.setCursor(Qt.CursorShape.ArrowCursor)
-                else:
-                    self.delegate.hovered_row = -1
-                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
-
-                viewport.update()
+                self._update_hover(event.position().toPoint())
 
             elif event.type() == QEvent.Type.Leave:
                 self.delegate.clear_mouse_pos()
@@ -1037,7 +1060,7 @@ class PlaylistPageView(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(36)
-        self.table.setShowGrid(True)
+        self.table.setShowGrid(False)
 
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)

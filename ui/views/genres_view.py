@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 from core.library_store import LibraryStore
 from ui.widgets.empty_state import EmptyStateWidget
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
+from ui.views.artists_view import SimpleRowHoverDelegate, SimpleRowHoverFilter
 
 
 class _GenresTableModel(QAbstractTableModel):
@@ -98,12 +99,19 @@ class GenresView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.setShowGrid(True)
+        self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.setColumnWidth(0, 450)
         self.table.setColumnWidth(1, 100)
         self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader())
+        
+        self.delegate = SimpleRowHoverDelegate(self.table)
+        self.table.setItemDelegate(self.delegate)
+        self.table.setMouseTracking(True)
+        self.hover_filter = SimpleRowHoverFilter(self.table, self.delegate)
+        self.table.viewport().installEventFilter(self.hover_filter)
+        
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
         self.table.doubleClicked.connect(self._on_double_clicked)
         self.stack.addWidget(self.table)
