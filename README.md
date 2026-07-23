@@ -87,8 +87,7 @@ Please note that this project is **currently in progress and is not yet fully co
 ### 7. Playlists System, Custom Cover Art & Drag-and-Drop Integration
 * **Smart & Custom Playlists:** Features automated Smart Playlists (*Favorites*, *Recently Added*, *Recently Played*, *Most Played*) alongside full support for creating, renaming, and deleting Custom Playlists.
 * **Custom Playlist Cover Art & Smart Collage Fallback:** Custom playlists support setting a custom cover image. If no custom image is assigned, AuraPlayer automatically generates a beautiful default cover collage using the artwork from the first 4 unique albums added to that playlist (ordered by addition date). If tracks are deleted or modified, the collage dynamically cascades to display the next available album artwork.
-* **Drag-and-Drop from Queue to Playlists:** Drag songs directly out of the Queue side-panel and drop them onto any custom playlist or smart playlist card (such as *Favorites*) to add them instantly.
-* **Comprehensive Drag-and-Drop Support:** Drag tracks from any track list view (Tracks, Albums, Artists, Genres, or Playlists) and drop them onto custom playlists or smart playlist cards to build playlists effortlessly.
+* **Drag-and-Drop from Queue to Playlists:** Drag songs directly out of the Queue side-panel and drop them onto any custom playlist or smart playlist card to add them instantly.
 
 ---
 

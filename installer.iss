@@ -2,7 +2,7 @@
 ; Compatible with Inno Setup 6.0+
 
 #define MyAppName "AuraPlayer"
-#define MyAppVersion "1.0.0-beta"
+#define MyAppVersion "1.0.1-beta"
 #define MyAppPublisher "Parsa Alavi"
 #define MyAppURL "https://github.com/parsaalavi1382/AuraPlayer"
 #define MyAppExeName "AuraPlayer.exe"
