@@ -8,6 +8,8 @@ __pycache__/
 
 test_music/
 
+playlist_covers/
+
 .music-sync.json
 
 .run.bat

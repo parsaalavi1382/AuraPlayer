@@ -35,6 +35,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.store = store
         self.setWindowTitle("Settings")
+        self.setAcceptDrops(True)
         
         import os
         from utils.paths import get_resource_path
@@ -191,3 +192,45 @@ class SettingsDialog(QDialog):
         self.store.cache.settings.disabled_separators = self.separator_manager.get_disabled_separators()
         self.store.cache.save()
         self.accept()
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            import os
+            for url in event.mimeData().urls():
+                if os.path.isdir(url.toLocalFile()):
+                    event.acceptProposedAction()
+                    return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            import os
+            for url in event.mimeData().urls():
+                if os.path.isdir(url.toLocalFile()):
+                    event.acceptProposedAction()
+                    return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            import os
+            new_folders = []
+            for url in event.mimeData().urls():
+                local_path = url.toLocalFile()
+                if os.path.isdir(local_path):
+                    norm_folder = os.path.normpath(os.path.abspath(local_path))
+                    existing_normalized = [
+                        os.path.normpath(os.path.abspath(f))
+                        for f in self.store.cache.settings.music_folders
+                    ]
+                    if norm_folder not in existing_normalized:
+                        self.store.cache.settings.music_folders.append(norm_folder)
+                        new_folders.append(norm_folder)
+            
+            if new_folders:
+                self.store.cache.save()
+                self._refresh_folder_list()
+                self.folders_added.emit(new_folders)
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)

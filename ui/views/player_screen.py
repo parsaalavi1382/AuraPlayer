@@ -106,6 +106,7 @@ class PlayerScreen(QFrame):
     # Volume and output devices
     volume_changed = pyqtSignal(float)
     output_device_selected = pyqtSignal(object)
+    favorite_toggled = pyqtSignal(str, bool)
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
@@ -417,11 +418,18 @@ class PlayerScreen(QFrame):
     # ------------------------------------------------------------------
 
     def _on_heart_clicked(self) -> None:
-        """Visual-only heart toggle (no persistence until Step 7)."""
         active = self._heart_btn.isChecked()
         if self._theme:
             color = "#E05C5C" if active else self._theme.get("text_secondary", "#9AA0AC")
             self._heart_btn.setIcon(svg_icon("heart", color, _ICON_SIZE, filled=active))
+        if self._current_path:
+            self.favorite_toggled.emit(self._current_path, active)
+
+    def set_favorited(self, favorited: bool) -> None:
+        self._heart_btn.setChecked(favorited)
+        text_secondary = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
+        heart_color = "#E05C5C" if favorited else text_secondary
+        self._heart_btn.setIcon(svg_icon("heart", heart_color, _ICON_SIZE, filled=favorited))
 
     def _on_shuffle_clicked(self) -> None:
         self.shuffle_clicked.emit()

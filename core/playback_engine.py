@@ -126,6 +126,8 @@ class PlaybackEngine(QObject):
         self._old_player_cleanup_timer.setSingleShot(True)
         self._old_player_cleanup_timer.timeout.connect(self._cleanup_old_player)
 
+        self._last_incremented_path: Optional[str] = None
+
         # Restore the last session's track + position
         self._restore_initial_state(state)
 
@@ -143,8 +145,20 @@ class PlaybackEngine(QObject):
                 self.playback_state_changed.emit("paused")
         elif new_state == "playing":
             self.playback_state_changed.emit("playing")
+            current_path = self.get_current_track_path()
+            if current_path and current_path != self._last_incremented_path:
+                self._last_incremented_path = current_path
+                self._increment_track_play_stats(current_path)
         elif new_state in ("paused", "stop_initial", "stop_end"):
             self.playback_state_changed.emit("paused")
+
+    def _increment_track_play_stats(self, path: str) -> None:
+        track = self.store.get_track(path)
+        if track:
+            from datetime import datetime
+            track.play_count += 1
+            track.last_played = datetime.now()
+            self.store.update_track(track)
 
     def _on_playback_state_changed(self, state) -> None:
         """Handles background state updates from QMediaPlayer."""
@@ -218,6 +232,7 @@ class PlaybackEngine(QObject):
         self._save_timer.stop()
         self._update_macro_state("stop_initial")
         self.position_changed.emit(0.0, 0.0)
+        self._last_incremented_path = None
 
     def seek(self, position_seconds: float) -> None:
         self._active.setPosition(int(position_seconds * 1000))
@@ -612,6 +627,29 @@ class PlaybackEngine(QObject):
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
+
+    def insert_into_queue(self, track_paths: list[str], at_index: int) -> None:
+        current_path = self.get_current_track_path()
+        was_empty_or_stopped = current_path is None or self._active.source().isEmpty()
+
+        # Remove any existing duplicates of these paths silently so we move them or add them anew
+        for path in track_paths:
+            self._remove_from_original_queue_silently(path)
+            self._remove_from_queue_silently(path)
+        
+        idx = max(0, min(at_index, len(self._queue)))
+        # Insert them
+        for path in reversed(track_paths):
+            self._original_queue.insert(idx, path)
+            self._queue.insert(idx, path)
+            
+        self._resync_queue_index_to_current_track(fallback_path=current_path)
+        self._persist_queue()
+        self.queue_changed.emit()
+
+        if was_empty_or_stopped and track_paths:
+            new_index = self._queue.index(track_paths[0])
+            self._play_queue_index(new_index)
 
     def _remove_from_original_queue_silently(self, track_path: str) -> None:
         if track_path in self._original_queue:

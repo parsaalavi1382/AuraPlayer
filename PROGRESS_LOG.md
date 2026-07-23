@@ -12,7 +12,7 @@
 | Step 4 | ✅ Done | 2026-06-30 |
 | Step 5 | ✅ Done | 2026-07-01 |
 | Step 6 | ✅ Done | 2026-07-02 |
-| Step 7 | 🔄 In Progress | - |
+| Step 7 | ✅ Done | 2026-07-19 |
 | Step 8 | ✅ Done | 2026-07-02 |
 | Step 9 | 🔜 Planned | - |
 | Step 10 | 🔜 Planned | - |
@@ -213,11 +213,24 @@
 - **Unsaved Changes Confirmation Safeguard:** Configured dialog `closeEvent` and button handlers to check if any field has been modified. Displays an intuitive "Are you sure? Changes will be lost" confirmation popup when closing with unsaved edits, and closes directly when clean.
 - **Instant Live App-Wide Refresh:** Connected the Save action directly to the single source of truth `LibraryStore.update_track()`. Updates propagate instantly and seamlessly across all visible tables, stats, and dynamic pages (such as Album/Artist/Genre page views) with zero app freezes or restarts.
 
-### 🔜 Step 7: Playlists
-**Status:** Planned
+### ✅ Step 7: Playlists
+**Status:** Done
+**Date:** 2026-07-19
 **Deliverables:**
-- [Placeholder — create/rename/delete playlists, add/remove tracks,
-  drag-and-drop reordering, cover image picker]
+- **Durable Playlist Engine**: Implemented full CRUD and tracking for playlists inside `LibraryStore`, with automatic persistent saves back to the JSON cache on any changes.
+- **Visual Playlists Gallery**: Developed a responsive grid of card items inside `PlaylistsView` with automated 2x2 collage album art generation (from contained songs) and a beautiful "+ Create Playlist" card.
+- **Smart Playlists Support**: Implemented 4 smart playlists ("Favorites" 💖, "Recently Added" 🆕, "Recently Played" 🕒, and "Most Played" 🔥) driven by runtime library queries, ensuring renaming/deletion is locked.
+- **Rich Playlist Details View**: Added individual pages for custom and smart playlists containing title and playback statistics, "Choose Photo", "Revert Cover", and Rename/Delete commands.
+- **Cover Image Customization**: Added interactive clicking on custom playlist covers to select standard local images as custom cover artwork, and built "Revert Cover" to return to auto-generated collages.
+- **Flexible Track Drag & Drop**: Implemented drag-and-drop track operations. Users can drag tracks from the main Tracks list and drop them directly onto custom playlists.
+- **Sorting and Manual Reordering**: Added column sorting with visual direction arrows in header cells. Reordering rows manually by dragging seamlessly clears column sorts.
+- **Interactive Context Menu**: Built an "Add to Playlist" submenu in the right-click context menu of both the main Tracks list and playlist tracks list. Selecting a row under right-click fixes the selection highlight.
+- **Playlist UI Cleanup**: Removed the metadata title ("SMART PLAYLIST" / "CUSTOM PLAYLIST") from the playlist detail page. Removed the Sort Button ("Name ↑") and Row Header from `PlaylistsView` to keep the interface minimal. Removed the redundant kebab button (⋮) from custom playlists, fully shifting secondary actions to the right-click context menu.
+- **Responsive Smart Playlist Tiles**: Refactored the smart cards to use a dynamic responsive grid that scales from a **1×4 single row** on wide windows down to a **2×2 grid** on narrower screens (breakpoint chosen at **850px**).
+- **Beautiful Themed SVGs for Smart Covers**: Updated the smart playlist covers on the details page to render elegant centered SVG icons (`heart` for favorites, `recently_added` for recently added, `history` for recently played, `trending_up` for most played) with colored backgrounds matching their corresponding gallery cards.
+- **Refined Collage Layout**: Re-engineered the automated collage generation so that when 2 or 3 unique album covers are present, they are split beautifully vertically (2 covers), reserving the 4-cover collage for 4+ unique albums.
+- **Bulletproof Crash Safety**: Resolved the `RuntimeError: wrapped C/C++ object of type AuraDragTableView has been deleted` crash. Added try-except blocks and safe parent/C++ liveness checks on all `self.table` accesses, ensuring background animation timers and database updates never touch destroyed widget pointers during refresh/destruction cycles.
+- **Modernized Track List Layout**: Dropped the `#` index column in the playlist track table. Integrated the album cover art column directly into the Title column, fully supporting State A (pulsing equalizer), State B (play overlay on hover), and State C (static cover) matching the premium Tracks tab.
 
 ### ✅ Step 8: Queue Panel + Lyrics Panel
 **Status:** Done

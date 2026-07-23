@@ -20,7 +20,7 @@ import math
 
 import time
 
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect, QPoint, QRectF
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect, QPoint, QRectF, QMimeData
 
 from PyQt6.QtWidgets import (
 
@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
 
 )
 
-from PyQt6.QtGui import QFont, QAction, QPainter, QPainterPath, QBrush, QColor, QPixmap
+from PyQt6.QtGui import QFont, QAction, QPainter, QPainterPath, QBrush, QColor, QPixmap, QDrag, QPen
 
 
 
@@ -47,14 +47,15 @@ from core.metadata_reader import get_album_art
 class QueueListWidget(QListWidget):
 
     reordered = pyqtSignal(list)
-
-
+    paths_dropped = pyqtSignal(list, int)
 
     def __init__(self, parent=None):
 
         super().__init__(parent)
 
-        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
 
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
 
@@ -66,25 +67,129 @@ class QueueListWidget(QListWidget):
 
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
+        self._drag_hover_row = -1
 
+    def startDrag(self, supportedActions):
+        selected_items = self.selectedItems()
+        if not selected_items:
+            return
+        paths = []
+        for item in selected_items:
+            path = item.data(Qt.ItemDataRole.UserRole)
+            if path:
+                paths.append(path)
+        if not paths:
+            return
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setText("\n".join(paths))
+        mime.setData("application/x-aura-tracks", b"1")
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.MoveAction | Qt.DropAction.CopyAction)
+
+    def _get_drag_row(self, pos) -> int:
+        item = self.itemAt(pos)
+        if item:
+            row = self.row(item)
+            rect = self.visualItemRect(item)
+            if pos.y() > rect.top() + rect.height() // 2:
+                return row + 1
+            else:
+                return row
+        else:
+            return self.count()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-aura-tracks") or event.mimeData().hasText():
+            event.acceptProposedAction()
+            self._drag_hover_row = self._get_drag_row(event.position().toPoint())
+            self.viewport().update()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat("application/x-aura-tracks") or event.mimeData().hasText():
+            event.acceptProposedAction()
+            new_row = self._get_drag_row(event.position().toPoint())
+            if new_row != self._drag_hover_row:
+                self._drag_hover_row = new_row
+                self.viewport().update()
+        else:
+            super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event):
+        self._drag_hover_row = -1
+        self.viewport().update()
+        super().dragLeaveEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if hasattr(self, "_drag_hover_row") and self._drag_hover_row >= 0:
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor("#FFFFFF"), 2)
+            painter.setPen(pen)
+            
+            row = self._drag_hover_row
+            row_count = self.count()
+            
+            if row < row_count:
+                item = self.item(row)
+                if item:
+                    rect = self.visualItemRect(item)
+                    y = rect.top()
+                else:
+                    y = 0
+            else:
+                if row_count > 0:
+                    item = self.item(row_count - 1)
+                    if item:
+                        rect = self.visualItemRect(item)
+                        y = rect.bottom()
+                    else:
+                        y = 0
+                else:
+                    y = 0
+                    
+            painter.drawLine(0, y, self.viewport().width(), y)
+            painter.end()
 
     def dropEvent(self, event):
+        self._drag_hover_row = -1
+        self.viewport().update()
+
+        mime = event.mimeData()
+        if mime.hasFormat("application/x-aura-tracks") or mime.hasText():
+            text = mime.text()
+            paths = [p.strip() for p in text.split("\n") if p.strip()]
+            
+            if paths:
+                pos = event.position().toPoint()
+                to_row = self._get_drag_row(pos)
+                
+                # Check if this is an internal reorder move
+                if event.source() == self:
+                    current_paths = [self.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.count())]
+                    selected_items = self.selectedItems()
+                    if selected_items:
+                        dragged_path = selected_items[0].data(Qt.ItemDataRole.UserRole)
+                        if dragged_path in current_paths:
+                            from_row = current_paths.index(dragged_path)
+                            current_paths.pop(from_row)
+                            if to_row > from_row:
+                                to_row -= 1
+                            current_paths.insert(to_row, dragged_path)
+                            
+                            self.reordered.emit(current_paths)
+                            event.acceptProposedAction()
+                            return
+                else:
+                    # External drop (adding external paths)
+                    self.paths_dropped.emit(paths, to_row)
+                    event.acceptProposedAction()
+                    return
 
         super().dropEvent(event)
-
-        # Extract track paths in the new order
-
-        paths = []
-
-        for i in range(self.count()):
-
-            item = self.item(i)
-
-            if item:
-
-                paths.append(item.data(Qt.ItemDataRole.UserRole))
-
-        self.reordered.emit(paths)
 
 
 
@@ -696,6 +801,7 @@ class QueuePanel(QFrame):
         self.close_btn.clicked.connect(self.close_requested.emit)
 
         self.list_widget.reordered.connect(self._on_queue_reordered)
+        self.list_widget.paths_dropped.connect(self._on_queue_paths_dropped)
 
         self.list_widget.doubleClicked.connect(self._on_item_double_clicked)
 
@@ -924,6 +1030,16 @@ class QueuePanel(QFrame):
         try:
 
             self.engine.reorder_queue(paths)
+
+        except Exception as e:
+
+            self.refresh()
+
+    def _on_queue_paths_dropped(self, paths: list[str], to_row: int) -> None:
+
+        try:
+
+            self.engine.insert_into_queue(paths, to_row)
 
         except Exception as e:
 

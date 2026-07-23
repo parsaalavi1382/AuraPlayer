@@ -4,12 +4,12 @@ BottomBar: always-visible mini-player bar at the bottom of MainWindow.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMimeData
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QFrame, QSizePolicy, QSlider, QMenu,
+    QFrame, QSizePolicy, QSlider, QMenu, QApplication
 )
-from PyQt6.QtGui import QPixmap, QAction
+from PyQt6.QtGui import QPixmap, QAction, QDrag
 from ui.widgets.clickable_label import ClickableLabel
 from ui.widgets.seek_bar import SeekBar
 from ui.svg_icon import svg_icon, svg_pixmap
@@ -17,6 +17,53 @@ from ui.svg_icon import svg_icon, svg_pixmap
 from core.models import Track
 
 _ICON_SIZE = 20   # transport button icon size in the mini-bar (slightly smaller than player screen)
+
+
+class DraggableTrackLabel(ClickableLabel):
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self.drag_start_position = None
+        self._current_track_path_callback = None
+
+    def set_track_path_callback(self, callback):
+        self._current_track_path_callback = callback
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_start_position = event.position().toPoint()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
+            return
+        if self.drag_start_position is None:
+            return
+        if (event.position().toPoint() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
+            return
+            
+        if self._current_track_path_callback:
+            path = self._current_track_path_callback()
+            if path:
+                drag = QDrag(self)
+                mime = QMimeData()
+                mime.setText(path)
+                mime.setData("application/x-aura-tracks", b"1")
+                drag.setMimeData(mime)
+                drag.exec(Qt.DropAction.CopyAction)
+                self.drag_start_position = None
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.drag_start_position is not None:
+                self.clicked.emit()
+            self.drag_start_position = None
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
 
 
 class BottomBar(QFrame):
@@ -44,6 +91,7 @@ class BottomBar(QFrame):
     queue_clicked = pyqtSignal()
     output_device_selected = pyqtSignal(object)
     volume_changed = pyqtSignal(float)
+    favorite_toggled = pyqtSignal(str, bool)
 
     seek_requested = pyqtSignal(float)
 
@@ -69,9 +117,10 @@ class BottomBar(QFrame):
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter) # قرارگیری کل پکیج متنی در مرکز عمودی
 
-        self.title_label = ClickableLabel("No track playing", self)
+        self.title_label = DraggableTrackLabel("No track playing", self)
         self.title_label.setObjectName("bottomBarTitle")
         self.title_label.clicked.connect(self.title_clicked.emit)
+        self.title_label.set_track_path_callback(lambda: self._current_track.path if self._current_track else None)
         text_layout.addWidget(self.title_label)
 
         self.artist_container = QWidget(self)
@@ -303,6 +352,14 @@ class BottomBar(QFrame):
         if self._theme:
             color = "#E05C5C" if active else self._theme.get("text_secondary", "#9AA0AC")
             self._heart_btn.setIcon(svg_icon("heart", color, _ICON_SIZE, filled=active))
+        if self._current_track:
+            self.favorite_toggled.emit(self._current_track.path, active)
+
+    def set_favorited(self, favorited: bool) -> None:
+        self._heart_btn.setChecked(favorited)
+        text_secondary = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
+        heart_color = "#E05C5C" if favorited else text_secondary
+        self._heart_btn.setIcon(svg_icon("heart", heart_color, _ICON_SIZE, filled=favorited))
 
     def _on_queue_clicked(self) -> None:
         self.queue_clicked.emit()

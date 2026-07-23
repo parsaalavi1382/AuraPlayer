@@ -268,6 +268,12 @@ class MainWindow(QMainWindow):
         self.genres_view.genre_selected.connect(self.open_genre_page)
         self.albums_view.album_selected.connect(self.open_album_page)
         self.albums_view.artist_selected.connect(self.open_artist_page)
+        self.playlists_view.playlist_selected.connect(self.open_playlist_page)
+
+        # --- Favorite wiring ---
+        self.bottom_bar.favorite_toggled.connect(self._on_favorite_toggled)
+        self.player_screen.favorite_toggled.connect(self._on_favorite_toggled)
+        self.store.playlists_changed.connect(self._on_playlists_changed)
 
         # --- Restore session state into UI ---
         self.player_screen.set_shuffle(self.engine.get_shuffle())
@@ -508,6 +514,10 @@ class MainWindow(QMainWindow):
         self.bottom_bar.set_playing(self.engine.is_playing())
         self.tracks_view.model.set_currently_playing(track_path or None)
 
+        is_fav = self.store.is_track_favorited(track_path) if track_path else False
+        self.bottom_bar.set_favorited(is_fav)
+        self.player_screen.set_favorited(is_fav)
+
         if track:
             self._load_and_push_art(track_path)
         else:
@@ -718,3 +728,61 @@ class MainWindow(QMainWindow):
             self.player_screen.parentResized(
                 self.size()
             )
+
+    def _on_favorite_toggled(self, track_path: str, favorited: bool) -> None:
+        self.store.set_track_favorited(track_path, favorited)
+        # Keep both bottom bar and player screen in sync
+        self.bottom_bar.set_favorited(favorited)
+        self.player_screen.set_favorited(favorited)
+
+    def _on_playlists_changed(self, playlist_id: str) -> None:
+        if playlist_id == "smart_favorites":
+            current = self.engine.get_current_track()
+            if current:
+                is_fav = self.store.is_track_favorited(current.path)
+                self.bottom_bar.set_favorited(is_fav)
+                self.player_screen.set_favorited(is_fav)
+
+    def open_playlist_page(self, playlist_id: str) -> None:
+        self._close_player_screen()
+        
+        # Determine tab title: Name | Playlist
+        if playlist_id.startswith("smart_"):
+            pl_name = {
+                "smart_recently_added": "Recently Added",
+                "smart_favorites": "Favorites",
+                "smart_recently_played": "Recently Played",
+                "smart_most_played": "Most Played",
+            }.get(playlist_id, "Smart Playlist")
+        else:
+            pl_obj = self.store.get_playlist(playlist_id)
+            if not pl_obj:
+                return
+            pl_name = pl_obj.name
+            
+        tab_title = f"{pl_name} | Playlist"
+        
+        for index in range(self.tabs.count()):
+            if self.tabs.tabText(index) == tab_title:
+                self.tabs.setCurrentIndex(index)
+                return
+                
+        from ui.views.playlist_page_view import PlaylistPageView
+        view = PlaylistPageView(playlist_id, self.store, self.engine, self)
+        view.track_double_clicked.connect(self._on_track_double_clicked)
+        view.artist_requested.connect(self.open_artist_page)
+        view.album_requested.connect(self.open_album_page)
+        view.genre_requested.connect(self.open_genre_page)
+        view.play_all_requested.connect(self._on_play_all_requested)
+        view.playlist_deleted.connect(self._on_playlist_deleted_signal)
+        
+        idx = self.tabs.addTab(view, tab_title)
+        self.tabs.setCurrentIndex(idx)
+
+    def _on_playlist_deleted_signal(self, playlist_id: str) -> None:
+        # Find and close any open playlist tabs for this ID
+        from ui.views.playlist_page_view import PlaylistPageView
+        for index in range(self.tabs.count() - 1, 4, -1):
+            widget = self.tabs.widget(index)
+            if isinstance(widget, PlaylistPageView) and widget.playlist_id == playlist_id:
+                self._on_tab_close_requested(index)

@@ -14,13 +14,11 @@ on dynamically-opened tabs.
 when dynamic tabs first exist.
 
 ## 2. Right-click menu — full version with icons
+**Status:** ✅ COMPLETED
+
 Play Next, Add to Playing Queue, Edit Metadata, Remove Song,
 Add to Playlist (submenu of playlists), Properties (full info dialog:
 art, all tags, bitrate, sample rate, file path/size/format).
-**Fits:** Spread across Step 3 (queue exists → Play Next/Add to Queue),
-Step 6 (Edit Metadata), Step 7 (Add to Playlist submenu), and a
-Properties dialog can land alongside Step 6 since it needs the same
-tag-reading path as the editor.
 
 ## 3. Left-click behavior on rows
 **Status:** ✅ COMPLETED
@@ -61,41 +59,29 @@ dynamic tabs (Artist/Album/Playlist pages).
 when Step 9 starts so we're not redesigning the top bar twice.
 
 ## 7. Smart playlists (4 fixed, non-removable)
+**Status:** ✅ COMPLETED
+
 Recently Added 🕐, Favorites ❤️, Recently Played 🔄, Most Played 🔥.
 Each has its own sort logic and can't be deleted by the user.
-**Fits:** Step 7 (Playlists). Note: Recently Played and Most Played need
-a `last_played` timestamp and `play_count` on Track -- adding those
-fields to the model is a small Step 3 addition (playback engine is what
-would update them) so Step 7 doesn't need a model migration later.
 
 ## 8. Stats header on every tab/page
+**Status:** ✅ COMPLETED
+
 "Total Tracks: XXX" / "Total Artists: XXX" / etc., plus per-page counts
 ("Tracks by this artist: XXX") on Artist/Album/Playlist pages.
-**Fits:** Cheap to add incrementally as each view/page is built --
-Tracks/Artists/Albums/Playlists tabs can get this in a small Step 2
-follow-up; Artist/Album/Playlist pages get it natively when built in
-Steps 5/7.
 
 ## 9. Drag & drop, full support
+**Status:** ✅ COMPLETED
+
 Tracks -> Playlists, between playlists, reordering the Queue, dragging
 folders into the app to add to library.
-**Fits:** Step 7 (playlist drag-drop + reordering, already specced),
-Step 3/8 (queue reordering), and folder drag-drop can be added to the
-Settings folder list or main window whenever Step 7 is in progress.
 
 ## 10. Favorite (heart) toggle for tracks
+**Status:** ✅ COMPLETED
+
 ❤️ in two places: next to the currently-playing track (bottom bar /
 Player Screen) and in the bottom panel next to Lyrics & Queue buttons.
 Toggling adds/removes from the Favorites smart playlist (see #7).
-**Fits:** Step 4 (Player Screen) for the screen-level heart, Step 7 for
-the Favorites-playlist wiring (depends on #7 existing first).
-
-## 11. Export Library (Settings)
-Button in Settings to export all track data (path, metadata, play
-count, last played, etc.) as JSON or CSV.
-**Fits:** Late step, once play count / last played exist (depends on
-#7's model additions) -- naturally a Settings addition once the rest of
-Settings is stable, likely alongside or after Step 9.
 
 ## 12. Volume control (Player Screen, bottom right)
 **Status:** ✅ COMPLETED

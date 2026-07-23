@@ -157,6 +157,13 @@ class AlbumHoverEventFilter(QObject):
         self.view = view
 
     def eventFilter(self, obj, event):
+        try:
+            if not self.table or self.table.isHidden():
+                return False
+            _ = self.table.viewport()
+        except RuntimeError:
+            return False
+
         if event.type() == QEvent.Type.MouseMove:
             pos = event.position().toPoint()
             self.delegate.set_mouse_pos(pos)

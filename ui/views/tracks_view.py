@@ -41,6 +41,7 @@ from PyQt6.QtGui import QAction, QFont, QColor, QPainter, QPainterPath, QBrush, 
 
 from core.library_store import LibraryStore
 from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_GENRE, COL_DURATION
+from ui.widgets.drag_table_view import AuraDragTableView
 from ui.widgets.empty_state import EmptyStateWidget
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 
@@ -88,7 +89,7 @@ class TracksView(QWidget):
             self.empty_widget.action_button.clicked.connect(self.settings_requested.emit)
         self.stack.addWidget(self.empty_widget)
 
-        self.table = QTableView()
+        self.table = AuraDragTableView()
         self.model = TracksTableModel(self)
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -216,21 +217,84 @@ class TracksView(QWidget):
         index = self.table.indexAt(pos)
         if not index.isValid():
             return
+            
+        # Select the row under right-click to fix selected-row highlight
+        self.table.selectRow(index.row())
+        
         track = self.model.track_at(index.row())
         if not track:
             return
 
         menu = QMenu(self)
+
+        from ui.theme import THEMES, DEFAULT_THEME
+        theme_key = self.store.cache.settings.theme
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        bg = theme.get("surface", "#1E222B")
+        text = theme.get("text_primary", "#FFFFFF")
+        border = theme.get("border", "#2E323C")
+        accent = theme.get("accent", "#6C5CE7")
+
+        qss = f"""
+            QMenu {{
+                background-color: {bg};
+                color: {text};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 6px 12px;
+                border-radius: 4px;
+                color: {text};
+            }}
+            QMenu::item:selected {{
+                background-color: {accent};
+                color: {text};
+            }}
+        """
+        menu.setStyleSheet(qss)
+        
+        # Play / Queue controls
+        if self.engine:
+            add_queue_action = QAction("Add to Queue", self)
+            menu.addAction(add_queue_action)
+            add_queue_action.triggered.connect(lambda: self.engine.add_to_queue(track.path))
+            
+            play_next_action = QAction("Play Next", self)
+            menu.addAction(play_next_action)
+            play_next_action.triggered.connect(lambda: self.engine.play_next(track.path))
+            
+            menu.addSeparator()
+
         edit_action = QAction("Edit Metadata", self)
         remove_action = QAction("Remove Song", self)
-        add_playlist_action = QAction("Add to Playlist", self)
         menu.addAction(edit_action)
         menu.addAction(remove_action)
-        menu.addAction(add_playlist_action)
 
         edit_action.triggered.connect(lambda: self._on_edit_metadata(track))
         remove_action.triggered.connect(lambda: self._on_remove_song(track))
-        add_playlist_action.triggered.connect(lambda: self._on_add_to_playlist(track))
+
+        menu.addSeparator()
+
+        # Add to Playlist Submenu
+        add_playlist_menu = QMenu("Add to Playlist", self)
+        add_playlist_menu.setStyleSheet(qss)
+        custom_playlists = [p for p in self.store.all_playlists() if not p.id.startswith("smart_")]
+        
+        # Include Favorites
+        fav_action = QAction("Favorites", self)
+        fav_action.triggered.connect(lambda: self.store.add_tracks_to_playlist("smart_favorites", [track.path]))
+        add_playlist_menu.addAction(fav_action)
+        
+        if custom_playlists:
+            add_playlist_menu.addSeparator()
+            for pl in custom_playlists:
+                action = QAction(pl.name, self)
+                action.triggered.connect(lambda checked, p_id=pl.id: self.store.add_tracks_to_playlist(p_id, [track.path]))
+                add_playlist_menu.addAction(action)
+                
+        menu.addMenu(add_playlist_menu)
 
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
@@ -248,13 +312,6 @@ class TracksView(QWidget):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.store.remove_track(track.path)
-
-    def _on_add_to_playlist(self, track) -> None:
-        QMessageBox.information(
-            self, "Coming in Step 7",
-            "Playlists are built in Step 7. This menu item will let you add this "
-            "track to one once playlists exist."
-        )
 
 
 class TrackHoverDelegate(QStyledItemDelegate):
@@ -743,6 +800,13 @@ class HoverEventFilter(QObject):
         self.view = view
         
     def eventFilter(self, obj, event):
+        try:
+            if not self.table or self.table.isHidden():
+                return False
+            _ = self.table.viewport()
+        except RuntimeError:
+            return False
+            
         if event.type() == QEvent.Type.MouseMove:
             pos = event.position().toPoint()
             self.delegate.set_mouse_pos(pos)

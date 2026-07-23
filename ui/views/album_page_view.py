@@ -24,6 +24,7 @@ from core.models import Track
 from core.metadata_reader import get_album_art
 from ui.theme import THEMES, DEFAULT_THEME
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
+from ui.widgets.drag_table_view import AuraDragTableView
 
 COL_TRACK_NO = 0
 COL_TITLE = 1
@@ -427,6 +428,14 @@ class AlbumHoverEventFilter(QObject):
         self.view = view
 
     def eventFilter(self, obj, event):
+        try:
+            if not self.table or self.table.isHidden():
+                return False
+            # Check if C++ object of table viewport is still alive
+            _ = self.table.viewport()
+        except RuntimeError:
+            return False
+
         if event.type() == QEvent.Type.MouseMove:
             pos = event.position().toPoint()
             self.delegate.set_mouse_pos(pos)
@@ -772,7 +781,7 @@ class AlbumPageView(QWidget):
 
                 self.tables_layout.addWidget(header_container)
 
-            table = QTableView()
+            table = AuraDragTableView()
             model = AlbumTracksTableModel(tracks, self)
             table.setModel(model)
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -828,8 +837,35 @@ class AlbumPageView(QWidget):
 
         from PyQt6.QtWidgets import QMenu, QMessageBox
         from PyQt6.QtGui import QAction
+        from ui.theme import THEMES, DEFAULT_THEME
 
         menu = QMenu(self)
+        theme_key = self.store.cache.settings.theme
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        bg = theme.get("surface", "#1E222B")
+        text = theme.get("text_primary", "#FFFFFF")
+        border = theme.get("border", "#2E323C")
+        accent = theme.get("accent", "#6C5CE7")
+
+        qss = f"""
+            QMenu {{
+                background-color: {bg};
+                color: {text};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 6px 12px;
+                border-radius: 4px;
+                color: {text};
+            }}
+            QMenu::item:selected {{
+                background-color: {accent};
+                color: {text};
+            }}
+        """
+        menu.setStyleSheet(qss)
         edit_action = QAction("Edit Metadata", self)
         remove_action = QAction("Remove Song", self)
         add_playlist_action = QAction("Add to Playlist", self)

@@ -10,6 +10,7 @@ keep serialization trivial and explicit.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
+from datetime import datetime
 from typing import Optional
 
 
@@ -37,16 +38,28 @@ class Track:
     source_folder: str = ""        # which added folder this came from
     file_missing: bool = False     # set at scan/refresh time if path vanished
     lyrics_source: Optional[str] = None  # "lrc" | "embedded" | "manual" | None
+    last_played: Optional[datetime] = None
+    play_count: int = 0
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        if self.last_played is not None:
+            if isinstance(self.last_played, datetime):
+                d["last_played"] = self.last_played.isoformat()
+        return d
 
     @staticmethod
     def from_dict(d: dict) -> "Track":
         # Filter unknown keys defensively so old cache files don't crash
         # on load if we add fields in later steps.
         known = {f for f in Track.__dataclass_fields__}
-        return Track(**{k: v for k, v in d.items() if k in known})
+        filtered = {k: v for k, v in d.items() if k in known}
+        if filtered.get("last_played") is not None and isinstance(filtered["last_played"], str):
+            try:
+                filtered["last_played"] = datetime.fromisoformat(filtered["last_played"])
+            except Exception:
+                filtered["last_played"] = None
+        return Track(**filtered)
 
     @property
     def album_key(self) -> str:
