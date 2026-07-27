@@ -635,7 +635,7 @@ class PlayerScreen(QFrame):
             
             if i < len(artist_list) - 1:
                 comma = QLabel(", ", self)
-                comma.setObjectName("playerArtist")
+                comma.setObjectName("playerArtistComma")
                 self.artist_layout.addWidget(comma)
                 
         self.artist_layout.addStretch()
@@ -741,7 +741,9 @@ class PlayerScreen(QFrame):
         self.setStyleSheet(
             f"QWidget#playerScreen {{ background-color: {bg}; }}"
             f"QLabel#playerTitle {{ color: {text_primary}; }}"
-            f"QLabel#playerArtist {{ color: {text_secondary}; }}"
+            f"QLabel#playerTitle:hover {{ color: {accent}; text-decoration: underline; }}"
+            f"QLabel#playerArtist, QLabel#playerArtistComma {{ color: {text_secondary}; }}"
+            f"QLabel#playerArtist:hover {{ color: {accent}; text-decoration: underline; }}"
             f"QLabel#playerArt {{ background-color: {surface}; border-radius: 16px; "
             f"color: {text_secondary}; font-size: 64px; }}"
         )

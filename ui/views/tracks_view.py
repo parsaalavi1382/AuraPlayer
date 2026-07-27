@@ -514,8 +514,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
             font = painter.font()
             if is_current:
                 font.setBold(True)
-                if not (option.state & QStyle.StateFlag.State_Selected):
-                    painter.setPen(QColor(theme['accent']))
+                painter.setPen(QColor(theme['accent']))
             else:
                 font.setBold(False)
             painter.setFont(font)
@@ -592,7 +591,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                         font = painter.font()
                         font.setUnderline(artist_hovered)
                         painter.setFont(font)
-                        if artist_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                        if artist_hovered:
                             painter.setPen(QColor(theme['accent']))
                         else:
                             painter.setPen(text_color)
@@ -609,7 +608,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                     font = painter.font()
                     font.setUnderline(artist_hovered)
                     painter.setFont(font)
-                    if artist_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                    if artist_hovered:
                         painter.setPen(QColor(theme['accent']))
                     else:
                         painter.setPen(text_color)
@@ -637,7 +636,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 
                 font.setUnderline(album_hovered)
                 painter.setFont(font)
-                if album_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                if album_hovered:
                     painter.setPen(QColor(theme['accent']))
                 else:
                     painter.setPen(text_color)
@@ -648,7 +647,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 
                 font.setUnderline(album_hovered)
                 painter.setFont(font)
-                if album_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                if album_hovered:
                     painter.setPen(QColor(theme['accent']))
                 else:
                     painter.setPen(text_color)
@@ -680,7 +679,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                             font = painter.font()
                             font.setUnderline(genre_hovered)
                             painter.setFont(font)
-                            if genre_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                            if genre_hovered:
                                 painter.setPen(QColor(theme['accent']))
                             else:
                                 painter.setPen(text_color)
@@ -697,7 +696,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                         font = painter.font()
                         font.setUnderline(genre_hovered)
                         painter.setFont(font)
-                        if genre_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                        if genre_hovered:
                             painter.setPen(QColor(theme['accent']))
                         else:
                             painter.setPen(text_color)

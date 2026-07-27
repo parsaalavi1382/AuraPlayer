@@ -330,10 +330,12 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
                         font.setUnderline(artist_hovered)
                         painter.setFont(font)
 
-                        if option.state & QStyle.StateFlag.State_Selected:
+                        if artist_hovered:
+                            painter.setPen(QColor(theme['accent']))
+                        elif option.state & QStyle.StateFlag.State_Selected:
                             painter.setPen(QColor(theme['text_primary']))
                         else:
-                            painter.setPen(QColor(theme['accent'] if artist_hovered else theme['text_secondary']))
+                            painter.setPen(QColor(theme['text_secondary']))
 
                         painter.drawText(x_offset, y_baseline, elided_artist)
                     else:
@@ -349,10 +351,12 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
                     font.setUnderline(artist_hovered)
                     painter.setFont(font)
 
-                    if option.state & QStyle.StateFlag.State_Selected:
+                    if artist_hovered:
+                        painter.setPen(QColor(theme['accent']))
+                    elif option.state & QStyle.StateFlag.State_Selected:
                         painter.setPen(QColor(theme['text_primary']))
                     else:
-                        painter.setPen(QColor(theme['accent'] if artist_hovered else theme['text_secondary']))
+                        painter.setPen(QColor(theme['text_secondary']))
 
                     painter.drawText(x_offset, y_baseline, artist)
                     x_offset += artist_width
@@ -391,10 +395,12 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
                             font.setUnderline(genre_hovered)
                             painter.setFont(font)
 
-                            if option.state & QStyle.StateFlag.State_Selected:
+                            if genre_hovered:
+                                painter.setPen(QColor(theme['accent']))
+                            elif option.state & QStyle.StateFlag.State_Selected:
                                 painter.setPen(QColor(theme['text_primary']))
                             else:
-                                painter.setPen(QColor(theme['accent'] if genre_hovered else theme['text_secondary']))
+                                painter.setPen(QColor(theme['text_secondary']))
 
                             painter.drawText(x_offset, y_baseline, elided_genre)
                         else:
@@ -410,10 +416,12 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
                         font.setUnderline(genre_hovered)
                         painter.setFont(font)
 
-                        if option.state & QStyle.StateFlag.State_Selected:
+                        if genre_hovered:
+                            painter.setPen(QColor(theme['accent']))
+                        elif option.state & QStyle.StateFlag.State_Selected:
                             painter.setPen(QColor(theme['text_primary']))
                         else:
-                            painter.setPen(QColor(theme['accent'] if genre_hovered else theme['text_secondary']))
+                            painter.setPen(QColor(theme['text_secondary']))
 
                         painter.drawText(x_offset, y_baseline, genre)
                         x_offset += genre_width
@@ -649,6 +657,22 @@ class AlbumPageView(QWidget):
 
         all_tracks = self.store.all_tracks()
         album_tracks = [t for t in all_tracks if t.album_key == self.album_key]
+
+        # Auto-recover if tracks' album_key changed (e.g. dropping an album artist or changing album name)
+        if not album_tracks and self.album_tracks:
+            old_paths = {t.path for t in self.album_tracks}
+            matching = [t for t in all_tracks if t.path in old_paths]
+            if matching:
+                new_key = matching[0].album_key
+                self.album_key = new_key
+                album_tracks = [t for t in all_tracks if t.album_key == self.album_key]
+                if hasattr(self, "main_window") and self.main_window and hasattr(self.main_window, "tabs"):
+                    tabs = self.main_window.tabs
+                    idx = tabs.indexOf(self)
+                    if idx != -1:
+                        new_tab_title = f"{matching[0].album} | Album"
+                        tabs.setTabText(idx, new_tab_title)
+
         self.album_tracks = album_tracks
         if not album_tracks:
             return
@@ -950,25 +974,25 @@ class AlbumPageView(QWidget):
             return
         dlg = AlbumEditorDialog(self.album_tracks, self.store, self)
         if dlg.exec():
-            # Since the dialog updated all tracks in self.album_tracks in-place,
-            # we can read the new values directly.
-            first_track = self.album_tracks[0]
-            new_album = first_track.album
-            new_album_artists = first_track.album_artists
-            primary_artist = (new_album_artists or ["Unknown Artist"])[0]
-            new_key = f"{new_album}::{primary_artist}"
+            edited_tracks = dlg.tracks if dlg.tracks else self.album_tracks
+            if edited_tracks:
+                first_track = edited_tracks[0]
+                new_album = first_track.album
+                new_album_artists = first_track.album_artists
+                primary_artist = (new_album_artists or first_track.artists or ["Unknown Artist"])[0]
+                new_key = f"{new_album}::{primary_artist}"
 
-            # Update main window tab if needed
-            if hasattr(self, "main_window") and self.main_window and hasattr(self.main_window, "tabs"):
-                tabs = self.main_window.tabs
-                idx = tabs.indexOf(self)
-                if idx != -1:
-                    new_tab_title = f"{new_album} | Album"
-                    tabs.setTabText(idx, new_tab_title)
+                # Update main window tab if needed
+                if hasattr(self, "main_window") and self.main_window and hasattr(self.main_window, "tabs"):
+                    tabs = self.main_window.tabs
+                    idx = tabs.indexOf(self)
+                    if idx != -1:
+                        new_tab_title = f"{new_album} | Album"
+                        tabs.setTabText(idx, new_tab_title)
 
-            # Update local album key
-            self.album_key = new_key
-            self.refresh()
+                # Update local album key
+                self.album_key = new_key
+                self.refresh()
 
     def disconnect_signals(self) -> None:
         try:

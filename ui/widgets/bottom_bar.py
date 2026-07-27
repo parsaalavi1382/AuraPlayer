@@ -496,7 +496,7 @@ class BottomBar(QFrame):
             
             if i < len(artists) - 1:
                 comma = QLabel(", ", self)
-                comma.setObjectName("bottomBarArtist")
+                comma.setObjectName("bottomBarArtistComma")
                 self.artist_layout.addWidget(comma)
         self.artist_layout.addStretch()
 

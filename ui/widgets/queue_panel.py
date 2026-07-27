@@ -454,26 +454,41 @@ class QueueHoverLabel(QLabel):
 
         self.font_size = font_size
 
-        self.is_hovered = False
+        self.setObjectName("queueHoverLabel")
+
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+
 
         # Defensive: enterEvent/leaveEvent don't strictly require mouse
+
         # tracking, but enabling it plus WA_Hover removes any ambiguity
+
         # about whether this specific small widget receives hover
+
         # notifications reliably while embedded inside a QListWidget
+
         # item widget.
+
         self.setMouseTracking(True)
+
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
-        # Fixed (not Maximum) so this label's box is pixel-exact to its
-        # text -- see class docstring above for why this matters here.
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+
+
+        self.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+
+
 
         self._update_style()
 
+
+
     def _resize_to_text(self) -> None:
-        fm = self.fontMetrics()
-        width = fm.horizontalAdvance(self.text())
-        self.setFixedWidth(max(width, 1))
+
+        pass
+
+
 
     def _update_style(self):
 
@@ -483,58 +498,67 @@ class QueueHoverLabel(QLabel):
 
         text_secondary = self.theme_colors.get("text_secondary", "#9AA0AC")
 
-       
+
 
         color = text_primary if self.is_bold else text_secondary
+
+
 
         if self.is_active:
 
             color = accent
 
-        elif self.is_hovered:
 
-            color = accent
-
-       
 
         font = QFont("Segoe UI", self.font_size)
+
         font.setBold(self.is_bold or self.is_active)
-        font.setUnderline(self.is_hovered)
+
         self.setFont(font)
 
+
+
         self.setStyleSheet(f"""
-            color: {color};
-            background-color: transparent;
-            border: none;
-            padding: 0px;
-            margin: 0px;
+
+            QLabel#queueHoverLabel {{
+
+                color: {color};
+
+                background-color: transparent;
+
+                border: none;
+
+                padding: 0px;
+
+                margin: 0px;
+
+            }}
+
+            QLabel#queueHoverLabel:hover {{
+
+                color: {accent};
+
+                text-decoration: underline;
+
+            }}
+
         """)
 
-        self._resize_to_text()
 
-       
 
     def enterEvent(self, event):
 
+        font = self.font()
+
+        font.setUnderline(True)
+        self.setFont(font)
         super().enterEvent(event)
 
-        self.is_hovered = True
-
-        self._update_style()
-
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-       
-
     def leaveEvent(self, event):
-
+        font = self.font()
+        font.setUnderline(False)
+        self.setFont(font)
         super().leaveEvent(event)
-
-        self.is_hovered = False
-
-        self._update_style()
-
-        self.setCursor(Qt.CursorShape.ArrowCursor)
 
 
 
@@ -569,6 +593,12 @@ class QueueItemWidget(QWidget):
     def __init__(self, track_path: str, title: str, artist: str, album_key: str, first_artist: str, is_active: bool, is_playing: bool, theme_colors: dict, has_embedded_art: bool = True, parent=None):
 
         super().__init__(parent)
+
+        self.setMouseTracking(True)
+
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+
 
         self.track_path = track_path
 
@@ -616,7 +646,17 @@ class QueueItemWidget(QWidget):
 
         # Separate artists dynamically for individual hover and underline effects
 
-        artists_layout = QHBoxLayout()
+        self.artist_container = QWidget(self)
+
+        self.artist_container.setObjectName("queueArtistContainer")
+
+        self.artist_container.setMouseTracking(True)
+
+        self.artist_container.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+
+
+        artists_layout = QHBoxLayout(self.artist_container)
 
         artists_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -636,7 +676,7 @@ class QueueItemWidget(QWidget):
 
         for idx, art_name in enumerate(artist_parts):
 
-            art_lbl = QueueHoverLabel(art_name, is_active, theme_colors, is_bold=False, font_size=9, parent=self)
+            art_lbl = QueueHoverLabel(art_name, is_active, theme_colors, is_bold=False, font_size=9, parent=self.artist_container)
 
             art_lbl.clicked.connect(lambda name=art_name: self.artist_requested.emit(name))
 
@@ -646,7 +686,7 @@ class QueueItemWidget(QWidget):
 
             if idx < len(artist_parts) - 1:
 
-                sep_lbl = QLabel(", ")
+                sep_lbl = QLabel(", ", self.artist_container)
 
                 sep_lbl.setFont(QFont("Segoe UI", 9))
 
@@ -662,7 +702,7 @@ class QueueItemWidget(QWidget):
 
         artists_layout.addStretch()
 
-        text_layout.addLayout(artists_layout)
+        text_layout.addWidget(self.artist_container)
 
 
 

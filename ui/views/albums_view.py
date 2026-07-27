@@ -140,7 +140,7 @@ class AlbumHoverDelegate(QStyledItemDelegate):
                 font.setUnderline(artist_hovered)
                 painter.setFont(font)
                 
-                if artist_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                if artist_hovered:
                     painter.setPen(QColor(theme['accent']))
                 else:
                     painter.setPen(QColor(theme['text_secondary']) if not (option.state & QStyle.StateFlag.State_Selected) else text_color)

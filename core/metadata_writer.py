@@ -42,6 +42,15 @@ def write_track_metadata(
     """
     Write metadata back to the physical audio file.
     """
+    title = title.strip() if title and title.strip() else "Unknown Title"
+    album = album.strip() if album and album.strip() else "Unknown Album"
+    artists = [a.strip() for a in artists if a.strip()] if artists else ["Unknown Artist"]
+    if not artists:
+        artists = ["Unknown Artist"]
+    album_artists = [a.strip() for a in album_artists if a.strip()] if album_artists else ["Unknown Artist"]
+    if not album_artists:
+        album_artists = ["Unknown Artist"]
+
     ext = os.path.splitext(filepath)[1].lower()
     
     # Read image bytes if a new cover was provided

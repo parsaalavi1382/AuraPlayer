@@ -463,7 +463,7 @@ class MainWindow(QMainWindow):
         current_widget = self.tabs.currentWidget()
         all_paths = []
         
-        # If the active tab has a standard tracks model (Tracks, Artist, Genre, etc.)
+        # If the active tab has a standard tracks model (Tracks, Artist, Genre, Playlist, etc.)
         if current_widget and hasattr(current_widget, "model") and current_widget.model:
             model = current_widget.model
             all_paths = [

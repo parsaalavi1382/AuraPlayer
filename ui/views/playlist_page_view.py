@@ -433,7 +433,7 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                             font = painter.font()
                             font.setUnderline(artist_hovered)
                             painter.setFont(font)
-                            if artist_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                            if artist_hovered:
                                 painter.setPen(QColor(theme['accent']))
                             else:
                                 painter.setPen(text_color)
@@ -450,7 +450,7 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                         font = painter.font()
                         font.setUnderline(artist_hovered)
                         painter.setFont(font)
-                        if artist_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                        if artist_hovered:
                             painter.setPen(QColor(theme['accent']))
                         else:
                             painter.setPen(text_color)
@@ -478,7 +478,7 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                     
                     font.setUnderline(album_hovered)
                     painter.setFont(font)
-                    if album_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                    if album_hovered:
                         painter.setPen(QColor(theme['accent']))
                     else:
                         painter.setPen(text_color)
@@ -489,7 +489,7 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                     
                     font.setUnderline(album_hovered)
                     painter.setFont(font)
-                    if album_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                    if album_hovered:
                         painter.setPen(QColor(theme['accent']))
                     else:
                         painter.setPen(text_color)
@@ -521,7 +521,7 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                                 font = painter.font()
                                 font.setUnderline(genre_hovered)
                                 painter.setFont(font)
-                                if genre_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                                if genre_hovered:
                                     painter.setPen(QColor(theme['accent']))
                                 else:
                                     painter.setPen(text_color)
@@ -538,7 +538,7 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                             font = painter.font()
                             font.setUnderline(genre_hovered)
                             painter.setFont(font)
-                            if genre_hovered and not (option.state & QStyle.StateFlag.State_Selected):
+                            if genre_hovered:
                                 painter.setPen(QColor(theme['accent']))
                             else:
                                 painter.setPen(text_color)
@@ -788,6 +788,12 @@ class PlaylistPageView(QWidget):
 
         self.refresh()
         self._update_animation_timer()
+
+    @property
+    def model(self) -> PlaylistTracksTableModel | None:
+        if self.table is not None:
+            return self.table.model()
+        return None
 
     def _on_playlists_changed_signal(self, pl_id: str) -> None:
         if pl_id == self.playlist_id:

@@ -116,7 +116,7 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             background: transparent;
         }}
 
-        QWidget#bottomBarArtistContainer, QWidget#playerArtistContainer {{
+        QWidget#bottomBarArtistContainer, QWidget#playerArtistContainer, QWidget#queueArtistContainer {{
             background-color: transparent;
             background: transparent;
             border: none;
@@ -126,7 +126,8 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             font-weight: 600;
         }}
 
-        QLabel#clickableLabel:hover, QLabel#playerTitle:hover, QLabel#playerArtist:hover, QLabel#bottomBarArtist:hover, QLabel#bottomBarTitle:hover {{
+        QLabel#clickableLabel:hover, QLabel#playerTitle:hover, QLabel#playerArtist:hover, QLabel#bottomBarArtist:hover, QLabel#bottomBarTitle:hover, QLabel#queueHoverLabel:hover {{
+            color: {c['accent']};
             text-decoration: underline;
         }}
 
@@ -335,7 +336,7 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             color: {c['text_secondary']};
         }}
 
-        QLabel#bottomBarArtist {{
+        QLabel#bottomBarArtist, QLabel#bottomBarArtistComma {{
             color: {c['text_secondary']};
             font-size: 12px;
         }}

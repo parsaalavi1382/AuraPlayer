@@ -445,7 +445,11 @@ class ArtistPageView(QWidget):
         for key, (name, year, track_path, main_artist) in sorted_albums:
             albums_list.append((key, name, year, track_path, main_artist))
             
-        self.albums_grid.set_albums(albums_list, is_appears_on=False)
+        if albums_list:
+            self.albums_container.setVisible(True)
+            self.albums_grid.set_albums(albums_list, is_appears_on=False)
+        else:
+            self.albums_container.setVisible(False)
 
         # Find Appears On tracks: artist is in track.artists, but NOT in track.album_artists
         appears_on_list = []
