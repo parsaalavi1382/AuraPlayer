@@ -18,7 +18,7 @@ from __future__ import annotations
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTabBar,
-    QMessageBox, QApplication,
+    QMessageBox, QApplication, QStackedWidget, QFrame, QPushButton, QLabel,
 )
 
 from core.library_store import LibraryStore
@@ -96,6 +96,9 @@ class MainWindow(QMainWindow):
         self.top_bar = TopBar()
         self.top_bar.settings_clicked.connect(self._open_settings)
         self.top_bar.search_clicked.connect(self._on_search_clicked)
+        self.top_bar.back_clicked.connect(self._on_back_clicked)
+        self.top_bar.forward_clicked.connect(self._on_forward_clicked)
+        self.top_bar.home_clicked.connect(self._on_home_clicked)
         layout.addWidget(self.top_bar)
 
         # --- Content Area (Tabs + Side Queue Panel) ---
@@ -105,8 +108,7 @@ class MainWindow(QMainWindow):
 
         # --- Main Tabs ---
         self.tabs = QTabWidget()
-        self.tabs.setTabsClosable(True)
-        self.tabs.tabCloseRequested.connect(self._on_tab_close_requested)
+        self.tabs.setTabsClosable(False)
 
         self.tracks_view = TracksView(self.store, self.engine)
         self.artists_view = ArtistsView(self.store)
@@ -119,7 +121,12 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.genres_view, "Genres")
         self.tabs.addTab(self.albums_view, "Albums")
         self.tabs.addTab(self.playlists_view, "Playlists")
-        content_layout.addWidget(self.tabs, stretch=1)
+
+        self.nav_stack = QStackedWidget()
+        self.nav_stack.addWidget(self.tabs)
+        self.page_history = []
+        self.forward_history = []
+        content_layout.addWidget(self.nav_stack, stretch=1)
 
         from ui.widgets.queue_panel import QueuePanel
         self.main_queue_panel = QueuePanel(self.store, self.engine)
@@ -610,17 +617,86 @@ class MainWindow(QMainWindow):
     # Navigation and Dynamic Pages
     # ------------------------------------------------------------------
 
-    def _on_tab_close_requested(self, index: int) -> None:
-        if index >= 5:  # permanent tabs are indices 0-4
-            widget = self.tabs.widget(index)
-            self.tabs.removeTab(index)
-            if widget:
-                if hasattr(widget, "disconnect_signals"):
+    def _cleanup_widgets(self, widgets: list) -> None:
+        for w in widgets:
+            if w and w != self.tabs:
+                self.nav_stack.removeWidget(w)
+                if hasattr(w, "view") and hasattr(w.view, "disconnect_signals"):
                     try:
-                        widget.disconnect_signals()
+                        w.view.disconnect_signals()
                     except Exception:
                         pass
-                widget.deleteLater()
+                w.deleteLater()
+
+    def _update_nav_buttons(self) -> None:
+        is_main_menu = (self.nav_stack.currentIndex() == 0)
+        can_back = bool(self.page_history) or not is_main_menu
+        can_forward = bool(self.forward_history)
+        can_home = can_back or can_forward
+        visible = not is_main_menu
+        self.top_bar.update_nav_state(can_back, can_forward, can_home, visible=visible)
+
+    def _show_detail_page(self, view, title: str) -> None:
+        current = self.nav_stack.currentWidget()
+        if getattr(current, "page_title", "") == title:
+            return
+
+        if self.forward_history:
+            self._cleanup_widgets(self.forward_history)
+            self.forward_history.clear()
+
+        if self.nav_stack.currentIndex() != 0 and current is not None:
+            self.page_history.append(current)
+        elif self.nav_stack.currentIndex() == 0:
+            self.page_history.append(self.tabs)
+
+        container = QWidget()
+        container.page_title = title
+        container.view = view
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(view, stretch=1)
+
+        self.nav_stack.addWidget(container)
+        self.nav_stack.setCurrentWidget(container)
+        self._update_nav_buttons()
+
+    def _on_back_clicked(self) -> None:
+        current = self.nav_stack.currentWidget()
+        if self.page_history:
+            prev_widget = self.page_history.pop()
+            if current:
+                self.forward_history.append(current)
+            self.nav_stack.setCurrentWidget(prev_widget)
+        elif self.nav_stack.currentIndex() != 0:
+            if current:
+                self.forward_history.append(current)
+            self.nav_stack.setCurrentIndex(0)
+        self._update_nav_buttons()
+
+    def _on_forward_clicked(self) -> None:
+        if not self.forward_history:
+            return
+        next_widget = self.forward_history.pop()
+        current = self.nav_stack.currentWidget()
+        if current is not None:
+            self.page_history.append(current)
+        self.nav_stack.setCurrentWidget(next_widget)
+        self._update_nav_buttons()
+
+    def _on_home_clicked(self) -> None:
+        all_detail_widgets = set(self.page_history + self.forward_history)
+        current = self.nav_stack.currentWidget()
+        if current and current != self.tabs:
+            all_detail_widgets.add(current)
+            
+        self.page_history.clear()
+        self.forward_history.clear()
+        self.nav_stack.setCurrentIndex(0)
+        
+        self._cleanup_widgets(list(all_detail_widgets))
+        self._update_nav_buttons()
 
     def _on_bottom_bar_title_clicked(self) -> None:
         track = self.engine.get_current_track()
@@ -636,11 +712,6 @@ class MainWindow(QMainWindow):
         self._close_player_screen()
         tab_title = f"{name} | Artist"
 
-        for index in range(self.tabs.count()):
-            if self.tabs.tabText(index) == tab_title:
-                self.tabs.setCurrentIndex(index)
-                return
-
         view = ArtistPageView(name, self.store, self.engine, self)
         view.track_double_clicked.connect(self._on_track_double_clicked)
         view.album_requested.connect(self.open_album_page)
@@ -648,13 +719,11 @@ class MainWindow(QMainWindow):
         view.genre_requested.connect(self.open_genre_page)
         view.play_all_requested.connect(self._on_play_all_requested)
 
-        # Refresh dynamically when tracks change
         self.store.tracks_added.connect(view.refresh_from_signal)
         self.store.track_removed.connect(view.refresh_from_signal)
         self.store.track_updated.connect(view.refresh_from_signal)
 
-        idx = self.tabs.addTab(view, tab_title)
-        self.tabs.setCurrentIndex(idx)
+        self._show_detail_page(view, tab_title)
 
     def open_album_page(self, key: str) -> None:
         self._close_player_screen()
@@ -666,33 +735,21 @@ class MainWindow(QMainWindow):
         album_title = album_tracks[0].album
         tab_title = f"{album_title} | Album"
 
-        for index in range(self.tabs.count()):
-            if self.tabs.tabText(index) == tab_title:
-                self.tabs.setCurrentIndex(index)
-                return
-
         view = AlbumPageView(key, self.store, self.engine, self)
         view.track_double_clicked.connect(self._on_track_double_clicked)
         view.artist_requested.connect(self.open_artist_page)
         view.genre_requested.connect(self.open_genre_page)
         view.play_all_requested.connect(self._on_play_all_requested)
 
-        # Refresh dynamically when tracks change
         self.store.tracks_added.connect(view.refresh_from_signal)
         self.store.track_removed.connect(view.refresh_from_signal)
         self.store.track_updated.connect(view.refresh_from_signal)
 
-        idx = self.tabs.addTab(view, tab_title)
-        self.tabs.setCurrentIndex(idx)
+        self._show_detail_page(view, tab_title)
 
     def open_genre_page(self, name: str) -> None:
         self._close_player_screen()
         tab_title = f"{name} | Genre"
-
-        for index in range(self.tabs.count()):
-            if self.tabs.tabText(index) == tab_title:
-                self.tabs.setCurrentIndex(index)
-                return
 
         view = GenrePageView(name, self.store, self.engine, self)
         view.track_double_clicked.connect(self._on_track_double_clicked)
@@ -701,21 +758,19 @@ class MainWindow(QMainWindow):
         view.genre_requested.connect(self.open_genre_page)
         view.play_all_requested.connect(self._on_play_all_requested)
 
-        # Refresh dynamically when tracks change
         self.store.tracks_added.connect(view.refresh_from_signal)
         self.store.track_removed.connect(view.refresh_from_signal)
         self.store.track_updated.connect(view.refresh_from_signal)
 
-        idx = self.tabs.addTab(view, tab_title)
-        self.tabs.setCurrentIndex(idx)
+        self._show_detail_page(view, tab_title)
 
     def _stub_navigate(self, where: str) -> None:
         pass
 
     def _on_search_clicked(self) -> None:
         QMessageBox.information(
-            self, "Coming in Step 9",
-            "Global search lands in Step 9.",
+            self, "Search",
+            "Search functionality and results layout are scheduled for upcoming design discussion.",
         )
 
     # ------------------------------------------------------------------
@@ -731,7 +786,6 @@ class MainWindow(QMainWindow):
 
     def _on_favorite_toggled(self, track_path: str, favorited: bool) -> None:
         self.store.set_track_favorited(track_path, favorited)
-        # Keep both bottom bar and player screen in sync
         self.bottom_bar.set_favorited(favorited)
         self.player_screen.set_favorited(favorited)
 
@@ -746,7 +800,6 @@ class MainWindow(QMainWindow):
     def open_playlist_page(self, playlist_id: str) -> None:
         self._close_player_screen()
         
-        # Determine tab title: Name | Playlist
         if playlist_id.startswith("smart_"):
             pl_name = {
                 "smart_recently_added": "Recently Added",
@@ -761,11 +814,6 @@ class MainWindow(QMainWindow):
             pl_name = pl_obj.name
             
         tab_title = f"{pl_name} | Playlist"
-        
-        for index in range(self.tabs.count()):
-            if self.tabs.tabText(index) == tab_title:
-                self.tabs.setCurrentIndex(index)
-                return
                 
         from ui.views.playlist_page_view import PlaylistPageView
         view = PlaylistPageView(playlist_id, self.store, self.engine, self)
@@ -776,13 +824,18 @@ class MainWindow(QMainWindow):
         view.play_all_requested.connect(self._on_play_all_requested)
         view.playlist_deleted.connect(self._on_playlist_deleted_signal)
         
-        idx = self.tabs.addTab(view, tab_title)
-        self.tabs.setCurrentIndex(idx)
+        self._show_detail_page(view, tab_title)
 
     def _on_playlist_deleted_signal(self, playlist_id: str) -> None:
-        # Find and close any open playlist tabs for this ID
         from ui.views.playlist_page_view import PlaylistPageView
-        for index in range(self.tabs.count() - 1, 4, -1):
-            widget = self.tabs.widget(index)
-            if isinstance(widget, PlaylistPageView) and widget.playlist_id == playlist_id:
-                self._on_tab_close_requested(index)
+        to_remove_page = [w for w in self.page_history if hasattr(w, "view") and isinstance(w.view, PlaylistPageView) and w.view.playlist_id == playlist_id]
+        to_remove_fwd = [w for w in self.forward_history if hasattr(w, "view") and isinstance(w.view, PlaylistPageView) and w.view.playlist_id == playlist_id]
+        self._cleanup_widgets(to_remove_page + to_remove_fwd)
+        self.page_history = [w for w in self.page_history if w not in to_remove_page]
+        self.forward_history = [w for w in self.forward_history if w not in to_remove_fwd]
+
+        current = self.nav_stack.currentWidget()
+        if hasattr(current, "view") and isinstance(current.view, PlaylistPageView) and current.view.playlist_id == playlist_id:
+            self._on_back_clicked()
+        else:
+            self._update_nav_buttons()

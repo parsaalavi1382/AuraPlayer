@@ -263,6 +263,8 @@ def svg_pixmap(
     # Synthesised assets
     if asset_name == "back":
         svg_bytes = _generate_back_arrow(color)
+        if mirrored:
+            svg_bytes = _mirror_horizontal(svg_bytes)
         pixmap = _render(svg_bytes, size)
         _CACHE[cache_key] = pixmap
         return pixmap
