@@ -55,6 +55,11 @@ class AlbumTracksTableModel(QAbstractTableModel):
     def rowCount(self, parent=QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._tracks)
 
+    def track_at(self, row: int) -> Track | None:
+        if 0 <= row < len(self._tracks):
+            return self._tracks[row]
+        return None
+
     def columnCount(self, parent=QModelIndex()) -> int:
         return 0 if parent.isValid() else len(COLUMN_HEADERS)
 

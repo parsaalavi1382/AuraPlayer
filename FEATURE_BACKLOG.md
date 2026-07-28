@@ -161,14 +161,12 @@ there for the first time and this is purely a Player-Screen-only visual
 treatment.
 
 ## 17. Global smooth transitions
-Qt-based animations (QPropertyAnimation or similar) for every tab
-switch, click, selection, and state change across the whole app --
-no instant/rigid UI changes anywhere.
-**Fits:** Cross-cutting rather than one step -- most naturally applied
-incrementally as each screen is built (Steps 4 onward), since retrofitting
-animations onto already-built static widgets means touching everything
-twice. Step 4's Player Screen is the first place this would show up
-concretely (album art transitions, lyrics/queue panel slides).
+**Status:** ✅ COMPLETED
+
+- **Main Tab Switching:** Simple, non-directional opacity fade (0.0 → 1.0, 150ms) when switching between main tabs.
+- **Detail Pages (Artist, Album, Genre, Playlist):** Directional fade (220ms, `OutCubic` easing) combining opacity fade with a subtle 25px shift from the right when navigating from the main menu or sub-pages into any detail page.
+- **Back & Home Navigation:** Directional fade (220ms, `OutCubic` easing) combining opacity fade with a subtle 25px shift from the left when navigating back or home out of detail pages.
+- **Safety & Performance:** Rapid navigation immediately cancels in-progress animations without queuing, and detaches graphic effects on completion to maintain sharp native rendering. Table views and Player Screen remain instant.
 
 ## 18. Custom transport controls + smart Next/Prev behavior
 **Status:** ✅ COMPLETED
@@ -207,22 +205,13 @@ active playing sequence inside `PlaybackEngine` on drop.
   position, a floating "Sync" button appears and smoothly animates the
   view back to the current line when clicked
 
-## 21. App header branding + animated tab indicator
-- Top bar shows "AuraPlayer" + an app icon, loaded from
-  `assets/logo.png` -- the UI code should reference this path but NOT
-  generate/placeholder the actual image file; the person will place a
-  real transparent PNG there themselves.
-- Tab menu (Tracks/Artists/Albums/Playlists): the faint static
-  underline becomes a full-width base line across the whole tab
-  container, with a separate, distinctly-highlighted active-tab
-  indicator segment that smoothly slides/animates when switching tabs.
-**Fits:** Step 9, bundled with the Search redesign since both touch the
-same `TopBar`/tab-area widgets and code -- doing the logo+indicator
-work now and the Search-bar layout change later would mean two separate
-passes over the same small piece of UI. The plain text rename to
-"AuraPlayer" (no logo, no animated indicator yet) was already applied
-on 2026-06-28 as a safe, contained change; the icon asset and the
-animated indicator itself remain here, pending Step 9.
+## 21. App header branding + animated tab indicator & vector icons
+**Status:** ✅ COMPLETED
+
+- Top bar branding with "AuraPlayer" title, logo asset loader, multi-size high-res process AppUserModelID icon registration.
+- **Animated Tab Indicator:** Removed static tab underline; added an animated `QFrame` indicator segment (`_tab_indicator`) that smoothly slides horizontal position (x) and width under the active tab (`QPropertyAnimation`, `OutCubic` easing, 250ms). Automatically resizes and snaps accurately on window resize events.
+- **Vector Tab Icons:** Added theme-adaptive vector icons (`qtawesome` FontAwesome 5 icons + `disc.svg`) beside tab titles, with active accent color highlighting.
+- **Full-width Base Line:** Styled `QTabWidget::pane` and `QTabBar` (`qproperty-drawBase: 0`) so the gray border line extends across the entire container width while the active indicator slides smoothly above it.
 
 ## 22. Multiple Genres support
 A `genres` field (list of strings, parsed with the same separator logic

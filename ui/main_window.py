@@ -500,6 +500,64 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, index: int) -> None:
         self._update_tab_indicator(index, animate=True)
         self._update_tab_icons()
+        widget = self.tabs.widget(index)
+        if widget:
+            self._animate_nav_transition(widget, mode="fade")
+
+    def _animate_nav_transition(self, target_widget: QWidget, mode: str = "fade") -> None:
+        if not target_widget:
+            return
+
+        if hasattr(self, "_nav_anim_group") and self._nav_anim_group is not None:
+            self._nav_anim_group.stop()
+
+        if hasattr(self, "_nav_anim_target_widget") and self._nav_anim_target_widget:
+            try:
+                self._nav_anim_target_widget.setGraphicsEffect(None)
+                self._nav_anim_target_widget.move(0, 0)
+            except Exception:
+                pass
+
+        self._nav_anim_target_widget = target_widget
+
+        from PyQt6.QtWidgets import QGraphicsOpacityEffect
+        from PyQt6.QtCore import QPropertyAnimation, QParallelAnimationGroup, QEasingCurve, QPoint
+
+        effect = QGraphicsOpacityEffect(target_widget)
+        target_widget.setGraphicsEffect(effect)
+
+        anim_group = QParallelAnimationGroup(self)
+
+        fade_anim = QPropertyAnimation(effect, b"opacity", anim_group)
+        fade_anim.setStartValue(0.0)
+        fade_anim.setEndValue(1.0)
+
+        if mode == "fade":
+            fade_anim.setDuration(150)
+            anim_group.addAnimation(fade_anim)
+        else:
+            fade_anim.setDuration(220)
+            anim_group.addAnimation(fade_anim)
+
+            offset_x = 25 if mode == "right" else -25
+            pos_anim = QPropertyAnimation(target_widget, b"pos", anim_group)
+            pos_anim.setDuration(220)
+            pos_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            pos_anim.setStartValue(QPoint(offset_x, 0))
+            pos_anim.setEndValue(QPoint(0, 0))
+            anim_group.addAnimation(pos_anim)
+
+        def _on_finished():
+            if hasattr(self, "_nav_anim_target_widget") and self._nav_anim_target_widget:
+                try:
+                    self._nav_anim_target_widget.setGraphicsEffect(None)
+                    self._nav_anim_target_widget.move(0, 0)
+                except Exception:
+                    pass
+
+        anim_group.finished.connect(_on_finished)
+        self._nav_anim_group = anim_group
+        anim_group.start()
 
     def _update_tab_indicator(self, index: int = -1, animate: bool = True) -> None:
         from PyQt6.QtCore import QRect
@@ -567,23 +625,40 @@ class MainWindow(QMainWindow):
     # Playback management
     # ------------------------------------------------------------------
 
+    def _get_active_view(self) -> QWidget | None:
+        if hasattr(self, "nav_stack") and self.nav_stack.currentIndex() != 0:
+            container = self.nav_stack.currentWidget()
+            if container and hasattr(container, "view"):
+                return container.view
+            return container
+        if hasattr(self, "tabs"):
+            return self.tabs.currentWidget()
+        return None
+
     def _on_track_double_clicked(self, track_path: str) -> None:
-        current_widget = self.tabs.currentWidget()
+        active_view = self._get_active_view()
         all_paths = []
         
-        # If the active tab has a standard tracks model (Tracks, Artist, Genre, Playlist, etc.)
-        if current_widget and hasattr(current_widget, "model") and current_widget.model:
-            model = current_widget.model
+        # If the active view has a standard tracks model (Tracks, Artist, Genre, Playlist, etc.)
+        if active_view and hasattr(active_view, "model") and active_view.model:
+            model = active_view.model
             all_paths = [
                 model.track_at(r).path
                 for r in range(model.rowCount())
                 if model.track_at(r) and not model.track_at(r).file_missing
             ]
-        # If the active tab is AlbumPageView which has multiple tables and self.album_tracks
-        elif current_widget and hasattr(current_widget, "album_tracks") and current_widget.album_tracks:
+        # If the active view is AlbumPageView which has self.album_tracks
+        elif active_view and hasattr(active_view, "album_tracks") and active_view.album_tracks:
             all_paths = [
                 t.path
-                for t in current_widget.album_tracks
+                for t in active_view.album_tracks
+                if not t.file_missing
+            ]
+        # If the active view is PlaylistPageView which has self.playlist_tracks
+        elif active_view and hasattr(active_view, "playlist_tracks") and active_view.playlist_tracks:
+            all_paths = [
+                t.path
+                for t in active_view.playlist_tracks
                 if not t.file_missing
             ]
             
@@ -746,6 +821,8 @@ class MainWindow(QMainWindow):
             self._cleanup_widgets(self.forward_history)
             self.forward_history.clear()
 
+        mode = "right"
+
         if self.nav_stack.currentIndex() != 0 and current is not None:
             self.page_history.append(current)
         elif self.nav_stack.currentIndex() == 0:
@@ -765,19 +842,26 @@ class MainWindow(QMainWindow):
         self.nav_stack.addWidget(container)
         self.nav_stack.setCurrentWidget(container)
         self._update_nav_buttons()
+        self._animate_nav_transition(container, mode=mode)
 
     def _on_back_clicked(self) -> None:
         current = self.nav_stack.currentWidget()
+        target_widget = None
         if self.page_history:
             prev_widget = self.page_history.pop()
             if current:
                 self.forward_history.append(current)
             self.nav_stack.setCurrentWidget(prev_widget)
+            target_widget = prev_widget
         elif self.nav_stack.currentIndex() != 0:
             if current:
                 self.forward_history.append(current)
             self.nav_stack.setCurrentIndex(0)
+            target_widget = self.tabs
         self._update_nav_buttons()
+
+        if target_widget:
+            self._animate_nav_transition(target_widget, mode="left")
 
     def _on_forward_clicked(self) -> None:
         if not self.forward_history:
@@ -788,6 +872,7 @@ class MainWindow(QMainWindow):
             self.page_history.append(current)
         self.nav_stack.setCurrentWidget(next_widget)
         self._update_nav_buttons()
+        self._animate_nav_transition(next_widget, mode="right")
 
     def _on_home_clicked(self) -> None:
         all_detail_widgets = set(self.page_history + self.forward_history)
@@ -801,6 +886,7 @@ class MainWindow(QMainWindow):
         
         self._cleanup_widgets(list(all_detail_widgets))
         self._update_nav_buttons()
+        self._animate_nav_transition(self.tabs, mode="left")
 
     def _on_bottom_bar_title_clicked(self) -> None:
         track = self.engine.get_current_track()
