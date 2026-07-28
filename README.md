@@ -15,7 +15,9 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ### 🚀 Pre-Release Binaries & Cross-Platform Testing Help Needed!
 
-I have officially published a **[Pre-Release version](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/v1.0.0-beta)** with compiled binaries for **Windows, macOS, and Linux**.
+### 🚀 Pre-Release Binaries & Cross-Platform Testing Help Needed!
+
+I have officially published a **[v1.0.2-Pre-Release version](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/1.0.2-beta)** with compiled binaries for **Windows, macOS, and Linux**.
 
 * **Windows:** Fully packaged and verified using Inno Setup (`installer.iss`). It works perfectly.
 * **macOS & Linux:** The build pipelines are configured via GitHub Actions (`release.yml`), but since I do not have physical access to a Mac or Linux machine to properly test the environment hooks, **I need your help!**
@@ -36,10 +38,19 @@ Please note that this project is **currently in progress and is not yet fully co
 
 ## 🎨 What AuraPlayer Does Right Now
 
-### 1. Dynamic Pages & Rich Navigation (Featuring Smart Multi-Artist Support)
+### 1. Live Floating Search Overlay & Clean Navigation Architecture
+* **Top Bar Live Search Box:** Features a centered, rounded search box directly in the Top Bar with a dynamic `×` clear button that clears input and hides when empty. `Ctrl+F` shortcut focuses the search box instantly from anywhere in the app.
+* **Non-Disruptive Floating Overlay (`SearchOverlay`):** Search results do NOT push new pages into the central tab navigation stack (preventing tab bar crowding). Instead, results drop down as an elegant floating modal overlay directly beneath the search input. Pressing `Esc` or clicking outside the dropdown dismisses the search overlay cleanly.
+* **Instant Multi-Category Results:** Live 180ms debounced search matching across Tracks, Artists, Albums, Genres, and Playlists with collapsible category sections ("View more" / "Show less").
+* **Rich Result Interactions:** 
+  - **Multi-Artist Links:** Collaborating artists on tracks and albums are rendered as individual clickable links with theme-aware hover highlights (text turns accent color & underlines on mouse hover).
+  - **Track Row Playback:** Hovering over any track row darkens the album cover thumbnail and reveals a play icon overlay. Single-clicking the cover thumbnail or double-clicking anywhere on the track row starts immediate playback.
+  - **Double-Click Navigation:** Double-clicking non-track result rows (Artists, Albums, Genres, Playlists) takes you directly to that item's view page.
+
+### 2. Dynamic Pages & Rich Navigation (Featuring Smart Multi-Artist Support)
 * **Smart Multi-Artist Support:** Features an intelligent music organizer. It automatically splits collaborating artists (separated by characters or words like commas, ampersands, or "feat.") so that songs neatly appear under the individual profile of every contributing artist.
 * **Artist Page:** Shows helpful statistics (like total track counts), a list of albums they released, a contributor section ("Appears On") for guest features, and a complete table of their tracks. Albums and guest features are laid out in a clean, wrapping grid that automatically resizes to fit your window, similar to photo grids on social media.
-* **Album Page:** Displays a gorgeous view with large cover art, year of release, total duration, and clickable artist buttons. Tracks are automatically grouped by disc numbers. Additionally, track numbers morph into a play button when you hover, and transform into a lively dancing music equalizer during active playback.
+* **Album Page:** Displays a gorgeous view with large cover art, year of release, total duration, and clickable artist links matching the exact font, color, and spacing of the bottom player bar (`bottomBarArtist` styling). Tracks are automatically grouped by disc numbers. Additionally, track numbers morph into a play button when you hover, and transform into a lively dancing music equalizer during active playback.
 * **Genre Page:** Displays songs filtered by selected genre, featuring instant play and shuffle controls.
 * **Genres Tab:** A complete, alphabetically sorted list of all genres in your music library with track counts.
 * **Aesthetic Tab Titles:** Dynamic pages display clean, professional titles like `Artist Name | Artist`, `Album Name | Album`, or `Genre Name | Genre`.

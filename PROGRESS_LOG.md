@@ -250,18 +250,17 @@
 - **Built-in Offline Lyrics Editor:** Constructed a `LyricsEditorDialog` with a full-height code-style layout. Users can write, paste, or format synchronized or unsynced lyrics, saving changes back to disk directly as `.lrc` or `.txt` next to the track.
 - **Album Tab Genre Hover & Navigation Fix:** Enabled proper underline hovers, hand cursor styling, and instant dynamic tab navigation for track genres displayed in the Album tab track table.
 
-### 🔜 Step 9: Settings Polish + Search
-**Status:** Planned
+### 🚀 Step 9: Settings Polish + Live Search Mechanism (v1.0.2-Pre-Release)
+**Status:** ✅ COMPLETED
 **Deliverables:**
-- [Placeholder — live search across Tracks/Artists/Albums/Playlists/
-  Genres (search matches genre names too, filtering the Genres tab the
-  same way it filters the others — see `FEATURE_BACKLOG.md` item #22),
-  search bar moved directly into the top bar replacing the standalone
-  🔍 button; app header branding (logo from `assets/logo.png` + title,
-  already showing "AuraPlayer" as text) and the animated sliding
-  active-tab indicator — see `FEATURE_BACKLOG.md` item #21; new View
-  menu with show/hide checkboxes for each tab including Genres (this is
-  a new menu, nothing like it exists yet)]
+- **Centered Top Bar Search Input:** Replaced standalone search icon with a centered, rounded search input field inside a 3-column `QGridLayout` top bar layout, with a dynamic clear (`×`) button that resets input text.
+- **Floating Live Search Overlay (`SearchOverlay`):** Implemented a real-time, 180ms debounced live search dropdown panel floating directly underneath the Top Bar search box without creating extra stack pages or cluttering the tab bar.
+- **Categorized Multi-Entity Search:** Real-time matching across Tracks, Artists, Albums, Genres, and Playlists with category section toggling ("View more" / "Show less").
+- **Esc & Backdrop Dismissal:** Pressing `Esc` or clicking anywhere outside the search dropdown panel instantly dismisses the search overlay without interrupting current playback or page state. `Ctrl+F` shortcut focuses search input from anywhere in the app.
+- **Smart Hover & Multi-Artist Links:** Multi-artist strings are split into individual `HoverLinkLabel` items. Moving over any text label turns it to the active theme's accent color with an underline.
+- **Track Row Playback & Cover Hover:** Hovering over a track row darkens the album thumbnail and reveals a play overlay icon. Single-clicking the cover art thumbnail or double-clicking anywhere on the row starts track playback.
+- **Double-Click Row Navigation:** Double-clicking non-track result rows (Artist, Album, Genre, Playlist) opens that item's page immediately.
+- **Album Page Artist Header Refactor:** Updated the header artist links on `AlbumPageView` to use `ClickableLabel` (`bottomBarArtist` styling) with gray secondary color by default, theme accent color on hover, and exact spacing.
 
 ### 🔜 Step 10: Packaging
 **Status:** Planned

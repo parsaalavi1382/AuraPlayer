@@ -51,12 +51,9 @@ This feature displays the track's album cover thumbnail on the left side of the 
 non-synced modes. Opens a full-featured code-style `LyricsEditorDialog` with disk persistence.
 
 ## 6. Search bar redesign
-Remove standalone 🔍 button; replace with a live search INPUT FIELD
-directly in the top bar next to ⚙. Filters current tab + related tabs
-in real time across Track/Artist/Album/Playlist name, including on
-dynamic tabs (Artist/Album/Playlist pages).
-**Fits:** Step 9 (Search), but the top-bar layout change should happen
-when Step 9 starts so we're not redesigning the top bar twice.
+**Status:** ✅ COMPLETED
+
+Centered live search input field directly in the Top Bar with a floating dropdown overlay (`SearchOverlay`). Live filtering across Tracks, Artists, Albums, Genres, and Playlists with `Ctrl+F` shortcut, dynamic clear (`×`) button, multi-artist link hovers, single-click/double-click playback & navigation, and outside-click/`Esc` dismissal.
 
 ## 7. Smart playlists (4 fixed, non-removable)
 **Status:** ✅ COMPLETED
