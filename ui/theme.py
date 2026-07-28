@@ -137,6 +137,11 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             top: -1px;
         }}
 
+        QTabBar {{
+            qproperty-drawBase: 0;
+            background: transparent;
+        }}
+
         QTabBar::tab {{
             background: transparent;
             color: {c['text_secondary']};
@@ -147,8 +152,7 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
         }}
 
         QTabBar::tab:selected {{
-            color: {c['text_primary']};
-            border-bottom: 2px solid {c['accent']};
+            color: {c['accent']};
         }}
 
         QTabBar::tab:hover:!selected {{

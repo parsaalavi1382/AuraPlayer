@@ -112,6 +112,20 @@ class MainWindow(QMainWindow):
         # --- Main Tabs ---
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(False)
+        self.tabs.setIconSize(QSize(18, 18))
+        
+        self._tab_indicator = QFrame(self.tabs.tabBar())
+        self._tab_indicator.setObjectName("tabIndicator")
+        self._tab_indicator.setFixedHeight(2)
+        self._tab_indicator.hide()
+        
+        from PyQt6.QtCore import QPropertyAnimation, QEasingCurve, QRect
+        self._tab_indicator_anim = QPropertyAnimation(self._tab_indicator, b"geometry")
+        self._tab_indicator_anim.setDuration(250)
+        self._tab_indicator_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs.tabBar().installEventFilter(self)
 
         self.tracks_view = TracksView(self.store, self.engine)
         self.artists_view = ArtistsView(self.store)
@@ -353,6 +367,10 @@ class MainWindow(QMainWindow):
         # Tracks table danger color
         self.tracks_view.model.set_danger_color(theme["danger"])
 
+        # Update tab icons and indicator color
+        self._update_tab_icons()
+        self._update_tab_indicator(animate=False)
+
         # Refresh all permanent views and dynamic tab views to pick up new colors
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
@@ -478,6 +496,72 @@ class MainWindow(QMainWindow):
         self.artists_view.refresh()
         self.albums_view.refresh()
         self.playlists_view.refresh()
+
+    def _on_tab_changed(self, index: int) -> None:
+        self._update_tab_indicator(index, animate=True)
+        self._update_tab_icons()
+
+    def _update_tab_indicator(self, index: int = -1, animate: bool = True) -> None:
+        from PyQt6.QtCore import QRect
+        if index < 0:
+            index = self.tabs.currentIndex()
+        if index < 0 or not hasattr(self, "_tab_indicator"):
+            return
+            
+        bar = self.tabs.tabBar()
+        rect = bar.tabRect(index)
+        target_rect = QRect(rect.x(), rect.height() - 2, rect.width(), 2)
+        
+        if animate and self._tab_indicator.isVisible():
+            self._tab_indicator_anim.stop()
+            self._tab_indicator_anim.setStartValue(self._tab_indicator.geometry())
+            self._tab_indicator_anim.setEndValue(target_rect)
+            self._tab_indicator_anim.start()
+        else:
+            self._tab_indicator_anim.stop()
+            self._tab_indicator.setGeometry(target_rect)
+            self._tab_indicator.show()
+
+    def _update_tab_icons(self) -> None:
+        from ui.theme import THEMES, DEFAULT_THEME
+        
+        theme_key = self.store.cache.settings.theme
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        accent = theme.get("accent", "#6C5CE7")
+        neutral = theme.get("text_secondary", "#9AA0AC")
+        
+        if hasattr(self, "_tab_indicator"):
+            self._tab_indicator.setStyleSheet(f"background-color: {accent}; border: none;")
+
+        try:
+            import qtawesome as qta
+        except ImportError:
+            return
+            
+        from ui.svg_icon import svg_icon
+        
+        icons = [
+            ("fa5s.music",),
+            ("fa5s.microphone-alt",),
+            ("fa5s.tag",),
+            ("disc", "asset"),
+            ("fa5s.list",)
+        ]
+        
+        current_idx = self.tabs.currentIndex()
+        for i, ic in enumerate(icons):
+            color = accent if i == current_idx else neutral
+            if len(ic) > 1 and ic[1] == "asset":
+                icon = svg_icon(ic[0], color, 18)
+            else:
+                icon = qta.icon(ic[0], color=color)
+            self.tabs.setTabIcon(i, icon)
+
+    def eventFilter(self, watched, event) -> bool:
+        from PyQt6.QtCore import QEvent
+        if hasattr(self, "tabs") and watched == self.tabs.tabBar() and event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
+            self._update_tab_indicator(animate=False)
+        return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------------
     # Playback management
