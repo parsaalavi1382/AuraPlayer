@@ -16,6 +16,7 @@ Step 3+4 additions:
 from __future__ import annotations
 
 from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTabBar,
     QMessageBox, QApplication, QStackedWidget, QFrame, QPushButton, QLabel,
@@ -41,6 +42,7 @@ from ui.views.player_screen import PlayerScreen
 from ui.views.artist_page_view import ArtistPageView
 from ui.views.album_page_view import AlbumPageView
 from ui.views.genre_page_view import GenrePageView
+from ui.views.search_view import SearchOverlay
 
 _MIN_SIZE_NORMAL = QSize(800, 560)
 _MIN_SIZE_PLAYER = QSize(500, 700)
@@ -95,7 +97,8 @@ class MainWindow(QMainWindow):
         # --- Top Bar ---
         self.top_bar = TopBar()
         self.top_bar.settings_clicked.connect(self._open_settings)
-        self.top_bar.search_clicked.connect(self._on_search_clicked)
+        self.top_bar.search_input.textChanged.connect(self._on_search_text_changed)
+        self.top_bar.search_input.escape_pressed.connect(self._on_search_escape)
         self.top_bar.back_clicked.connect(self._on_back_clicked)
         self.top_bar.forward_clicked.connect(self._on_forward_clicked)
         self.top_bar.home_clicked.connect(self._on_home_clicked)
@@ -160,6 +163,18 @@ class MainWindow(QMainWindow):
 
         # --- Player Screen Overlay (child of MainWindow, not central) ---
         self.player_screen = PlayerScreen(self)
+
+        # --- Search Overlay & Shortcuts ---
+        self.search_overlay = SearchOverlay(self.store, self.engine, self)
+        self.search_overlay.track_requested.connect(self._on_search_track_requested)
+        self.search_overlay.artist_requested.connect(self.open_artist_page)
+        self.search_overlay.album_requested.connect(self.open_album_page)
+        self.search_overlay.genre_requested.connect(self.open_genre_page)
+        self.search_overlay.playlist_requested.connect(self.open_playlist_page)
+        self.search_overlay.closed.connect(self._on_search_closed)
+
+        self._search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self._search_shortcut.activated.connect(self._on_search_clicked)
 
         # --- Volume & Output Device Controls (wired to PlayerScreen & BottomBar) ---
         self.player_screen.set_volume(self.engine.get_volume())
@@ -332,6 +347,8 @@ class MainWindow(QMainWindow):
         self.bottom_bar.apply_theme(theme)
         self.player_screen.apply_theme(theme)
         self.main_queue_panel.apply_theme(theme)
+        if hasattr(self, "search_overlay"):
+            self.search_overlay.apply_theme(theme)
 
         # Tracks table danger color
         self.tracks_view.model.set_danger_color(theme["danger"])
@@ -658,6 +675,9 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
         layout.addWidget(view, stretch=1)
 
+        if hasattr(self, "search_overlay"):
+            self.search_overlay.hide_search()
+
         self.nav_stack.addWidget(container)
         self.nav_stack.setCurrentWidget(container)
         self._update_nav_buttons()
@@ -768,10 +788,28 @@ class MainWindow(QMainWindow):
         pass
 
     def _on_search_clicked(self) -> None:
-        QMessageBox.information(
-            self, "Search",
-            "Search functionality and results layout are scheduled for upcoming design discussion.",
-        )
+        self.top_bar.search_input.setFocus()
+        self.top_bar.search_input.selectAll()
+
+    def _on_search_text_changed(self, text: str) -> None:
+        if hasattr(self, "search_overlay"):
+            self.search_overlay.set_query(text)
+
+    def _on_search_escape(self) -> None:
+        if hasattr(self, "search_overlay"):
+            self.search_overlay.hide_search()
+            self.top_bar.search_input.clear()
+            self.setFocus()
+
+    def _on_search_closed(self) -> None:
+        self.top_bar.search_input.clear()
+
+    def _on_search_track_requested(self, track_path: str) -> None:
+        if hasattr(self, "search_overlay"):
+            self.search_overlay.hide_search()
+        track = self.store.get_track(track_path)
+        if track:
+            self.open_album_page(track.album_key)
 
     # ------------------------------------------------------------------
     # Window resize: keep overlay geometry in sync
@@ -783,6 +821,8 @@ class MainWindow(QMainWindow):
             self.player_screen.parentResized(
                 self.size()
             )
+        if hasattr(self, "search_overlay") and self.search_overlay.isVisible():
+            self.search_overlay.parentResized(self.size())
 
     def _on_favorite_toggled(self, track_path: str, favorited: bool) -> None:
         self.store.set_track_favorited(track_path, favorited)
