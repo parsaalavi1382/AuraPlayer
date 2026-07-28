@@ -36,11 +36,14 @@ widget is visible.
 
 from __future__ import annotations
 
+import io
+from PIL import Image, ImageFilter
+
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QPropertyAnimation, QEasingCurve,
-    QRect, QSize,
+    QRect, QSize, QBuffer, QIODevice, QRunnable, QObject, QThreadPool,
 )
-from PyQt6.QtGui import QPixmap, QColor, QFont, QAction
+from PyQt6.QtGui import QPixmap, QColor, QFont, QAction, QPainter, QBrush, QPen
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGraphicsOpacityEffect, QSizePolicy, QFrame, QSlider, QMenu,
@@ -51,6 +54,7 @@ from ui.widgets.seek_bar import SeekBar
 from ui.widgets.clickable_label import ClickableLabel
 from ui.widgets.queue_panel import QueuePanel
 from ui.widgets.lyrics_panel import LyricsPanel
+from ui.widgets.hover_bold_button import HoverBoldButton
 
 # Animation durations in ms
 _SLIDE_MS = 320          # slide-up / slide-down
@@ -58,6 +62,62 @@ _FADE_MS = 220           # art ↔ lyrics / queue cross-fade
 _ICON_SIZE = 24          # transport icon px
 _ICON_SIZE_MAIN = 28     # play/pause icon px (slightly larger)
 _ART_SIZE = 360          # album art square, px
+
+
+def generate_blurred_background(art_pixmap: QPixmap, target_w: int, target_h: int, bg_color_hex: str = "#14161A") -> QPixmap | None:
+    if not art_pixmap or art_pixmap.isNull():
+        return None
+    try:
+        small_pix = art_pixmap.scaled(128, 128, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        buf = QBuffer()
+        buf.open(QIODevice.OpenModeFlag.ReadWrite)
+        small_pix.save(buf, "PNG")
+        raw_bytes = buf.data().data()
+        if not raw_bytes:
+            return None
+
+        pil_img = Image.open(io.BytesIO(raw_bytes)).convert("RGBA")
+        blurred_img = pil_img.filter(ImageFilter.GaussianBlur(radius=18)).resize((target_w, target_h), Image.Resampling.BILINEAR)
+
+        out_buf = io.BytesIO()
+        blurred_img.save(out_buf, format="PNG")
+        out_pix = QPixmap()
+        out_pix.loadFromData(out_buf.getvalue())
+
+        if out_pix.isNull():
+            return None
+
+        # Apply theme-aware overlay
+        painter = QPainter(out_pix)
+        bg_qcolor = QColor(bg_color_hex)
+        tint_color = QColor(bg_qcolor.red(), bg_qcolor.green(), bg_qcolor.blue(), 115)
+        painter.setBrush(QBrush(tint_color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRect(0, 0, target_w, target_h)
+        painter.end()
+
+        return out_pix
+    except Exception:
+        return None
+
+
+class _BlurWorkerSignals(QObject):
+    finished = pyqtSignal(int, object)  # (request_id, QPixmap)
+
+
+class _BlurWorker(QRunnable):
+    def __init__(self, request_id: int, art_pixmap: QPixmap, target_w: int, target_h: int, bg_color_hex: str):
+        super().__init__()
+        self.request_id = request_id
+        self.art_pixmap = art_pixmap
+        self.target_w = target_w
+        self.target_h = target_h
+        self.bg_color_hex = bg_color_hex
+        self.signals = _BlurWorkerSignals()
+
+    def run(self):
+        pixmap = generate_blurred_background(self.art_pixmap, self.target_w, self.target_h, self.bg_color_hex)
+        self.signals.finished.emit(self.request_id, pixmap)
 
 
 class _PlaceholderPanel(QFrame):
@@ -131,6 +191,9 @@ class PlayerScreen(QFrame):
         self._current_path: str | None = None
         self._art_pixmap: QPixmap | None = None
         self._has_custom_art = False
+        self._last_art_pixmap: QPixmap | None = None
+        self._blur_request_id = 0
+        self._active_bg_layer = 1
 
         self._volume = 0.5
         self._muted = False
@@ -138,6 +201,35 @@ class PlayerScreen(QFrame):
         self._devices: list[object] = []
         self._current_device: object | None = None
         self._is_default = True
+
+        # Dual background labels for full-bleed blurred artwork crossfading
+        self._bg_label_1 = QLabel(self)
+        self._bg_label_1.setObjectName("playerBgLayer1")
+        self._bg_label_1.setScaledContents(True)
+        self._bg_label_1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._bg_label_1.setGeometry(self.rect())
+        self._bg_label_1.lower()
+
+        self._bg_label_2 = QLabel(self)
+        self._bg_label_2.setObjectName("playerBgLayer2")
+        self._bg_label_2.setScaledContents(True)
+        self._bg_label_2.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._bg_label_2.setGeometry(self.rect())
+        self._bg_label_2.lower()
+
+        self._bg_opacity_1 = QGraphicsOpacityEffect(self._bg_label_1)
+        self._bg_label_1.setGraphicsEffect(self._bg_opacity_1)
+        self._bg_opacity_1.setOpacity(0.0)
+
+        self._bg_opacity_2 = QGraphicsOpacityEffect(self._bg_label_2)
+        self._bg_label_2.setGraphicsEffect(self._bg_opacity_2)
+        self._bg_opacity_2.setOpacity(0.0)
+
+        self._bg_fade_1 = QPropertyAnimation(self._bg_opacity_1, b"opacity")
+        self._bg_fade_1.setDuration(_FADE_MS)
+
+        self._bg_fade_2 = QPropertyAnimation(self._bg_opacity_2, b"opacity")
+        self._bg_fade_2.setDuration(_FADE_MS)
 
         self._build_ui()
 
@@ -370,7 +462,7 @@ class PlayerScreen(QFrame):
         self._prev_is_holding = False
 
     def _icon_btn(self, asset: str, size: int = _ICON_SIZE) -> QPushButton:
-        btn = QPushButton()
+        btn = HoverBoldButton()
         btn.setObjectName("iconButton")
         btn.setFixedSize(size + 16, size + 16)
         btn.setFlat(True)
@@ -599,15 +691,10 @@ class PlayerScreen(QFrame):
         q_color = accent if self._queue_active else secondary
         self._queue_btn.setIcon(svg_icon("queue", q_color, _ICON_SIZE))
 
-        # Lyrics: transparent bg inactive → solid fill active (via stylesheet)
+        # Lyrics: transparent bg in both active and inactive states
         l_color = accent if self._lyrics_active else secondary
         self._lyrics_btn.setIcon(svg_icon("lyric", l_color, _ICON_SIZE))
-        if self._lyrics_active:
-            self._lyrics_btn.setStyleSheet(
-                f"background-color: {surface}; border-radius: 8px; border: none;"
-            )
-        else:
-            self._lyrics_btn.setStyleSheet("background-color: transparent; border: none;")
+        self._lyrics_btn.setStyleSheet("background: transparent; background-color: transparent; border: none;")
 
     # ------------------------------------------------------------------
     # Public setters (called by MainWindow as engine signals arrive)
@@ -645,17 +732,94 @@ class PlayerScreen(QFrame):
         self._title_label.setText(title)
         self._populate_artists(artists)
         self._art_label.setText("")
+
+        # Compare new art with current art cacheKey to prevent unnecessary transitions between identical covers
+        new_key = art.cacheKey() if (art and not art.isNull()) else None
+        last_key = getattr(self, "_last_art_cache_key", None)
+        art_changed = (new_key != last_key) or (new_key is None and last_key is not None)
+
+        self._last_art_pixmap = art
+        self._last_art_cache_key = new_key
+
         if art and not art.isNull():
             self._art_label.setPixmap(art)
             self._has_custom_art = True
+            if art_changed:
+                self._update_blurred_background(art)
         else:
             self._has_custom_art = False
             from ui.svg_icon import get_default_cover
             theme_dict = self._theme if self._theme else {}
             self._art_label.setPixmap(get_default_cover(_ART_SIZE, theme_dict, corner_radius=16.0))
+            if art_changed:
+                self._clear_blurred_background()
 
         # Load lyrics on track change
         self._lyrics_panel.load_track_lyrics(path or "")
+
+    def _update_blurred_background(self, art: QPixmap) -> None:
+        self._blur_request_id += 1
+        req_id = self._blur_request_id
+        w = max(self.width(), 400)
+        h = max(self.height(), 400)
+        bg_hex = self._theme.get("bg", "#14161A") if self._theme else "#14161A"
+
+        worker = _BlurWorker(req_id, art, w, h, bg_hex)
+        worker.signals.finished.connect(self._on_blur_finished)
+        QThreadPool.globalInstance().start(worker)
+
+    def _clear_blurred_background(self) -> None:
+        self._blur_request_id += 1
+        self._bg_fade_1.stop()
+        self._bg_fade_1.setStartValue(self._bg_opacity_1.opacity())
+        self._bg_fade_1.setEndValue(0.0)
+        self._bg_fade_1.start()
+
+        self._bg_fade_2.stop()
+        self._bg_fade_2.setStartValue(self._bg_opacity_2.opacity())
+        self._bg_fade_2.setEndValue(0.0)
+        self._bg_fade_2.start()
+
+    def _on_blur_finished(self, request_id: int, pixmap: object) -> None:
+        if request_id != self._blur_request_id:
+            return
+        if not pixmap or not isinstance(pixmap, QPixmap) or pixmap.isNull():
+            self._clear_blurred_background()
+            return
+
+        w, h = self.width(), self.height()
+        if self._active_bg_layer == 1:
+            self._bg_label_2.setPixmap(pixmap)
+            self._bg_label_2.setGeometry(0, 0, w, h)
+            self._bg_label_2.lower()
+
+            self._bg_fade_1.stop()
+            self._bg_fade_1.setStartValue(self._bg_opacity_1.opacity())
+            self._bg_fade_1.setEndValue(0.0)
+            self._bg_fade_1.start()
+
+            self._bg_fade_2.stop()
+            self._bg_fade_2.setStartValue(self._bg_opacity_2.opacity())
+            self._bg_fade_2.setEndValue(1.0)
+            self._bg_fade_2.start()
+
+            self._active_bg_layer = 2
+        else:
+            self._bg_label_1.setPixmap(pixmap)
+            self._bg_label_1.setGeometry(0, 0, w, h)
+            self._bg_label_1.lower()
+
+            self._bg_fade_2.stop()
+            self._bg_fade_2.setStartValue(self._bg_opacity_2.opacity())
+            self._bg_fade_2.setEndValue(0.0)
+            self._bg_fade_2.start()
+
+            self._bg_fade_1.stop()
+            self._bg_fade_1.setStartValue(self._bg_opacity_1.opacity())
+            self._bg_fade_1.setEndValue(1.0)
+            self._bg_fade_1.start()
+
+            self._active_bg_layer = 1
 
     def set_playing(self, is_playing: bool) -> None:
         self._is_playing = is_playing
@@ -739,11 +903,12 @@ class PlayerScreen(QFrame):
         border = theme.get("border", "#2E323C")
 
         self.setStyleSheet(
-            f"QWidget#playerScreen {{ background-color: {bg}; }}"
-            f"QLabel#playerTitle {{ color: {text_primary}; }}"
-            f"QLabel#playerTitle:hover {{ color: {accent}; text-decoration: underline; }}"
-            f"QLabel#playerArtist, QLabel#playerArtistComma {{ color: {text_secondary}; }}"
-            f"QLabel#playerArtist:hover {{ color: {accent}; text-decoration: underline; }}"
+            f"QFrame#playerScreen {{ background-color: {bg}; }}"
+            f"QWidget#playerScreen QWidget {{ background-color: transparent; border: none; }}"
+            f"QLabel#playerTitle {{ color: {text_primary}; background: transparent; }}"
+            f"QLabel#playerTitle:hover {{ color: {accent}; text-decoration: underline; background: transparent; }}"
+            f"QLabel#playerArtist, QLabel#playerArtistComma {{ color: {text_secondary}; background: transparent; }}"
+            f"QLabel#playerArtist:hover {{ color: {accent}; text-decoration: underline; background: transparent; }}"
             f"QLabel#playerArt {{ background-color: {surface}; border-radius: 16px; "
             f"color: {text_secondary}; font-size: 64px; }}"
         )
@@ -784,6 +949,12 @@ class PlayerScreen(QFrame):
             self._lyrics_panel.apply_theme(theme)
         if hasattr(self, "_queue_panel"):
             self._queue_panel.apply_theme(theme)
+
+        # Re-render blurred background with new theme overlay tint
+        if getattr(self, "_has_custom_art", False) and getattr(self, "_last_art_pixmap", None):
+            self._update_blurred_background(self._last_art_pixmap)
+        else:
+            self._clear_blurred_background()
 
     # ------------------------------------------------------------------
     # Slide animation
@@ -828,6 +999,13 @@ class PlayerScreen(QFrame):
     def resizeEvent(self, event) -> None:
         """Keep the lyrics panel geometry in sync with the content area."""
         super().resizeEvent(event)
+        if hasattr(self, "_bg_label_1") and hasattr(self, "_bg_label_2"):
+            w, h = self.width(), self.height()
+            self._bg_label_1.setGeometry(0, 0, w, h)
+            self._bg_label_2.setGeometry(0, 0, w, h)
+            self._bg_label_1.lower()
+            self._bg_label_2.lower()
+
         if hasattr(self, "_lyrics_panel") and hasattr(self, "_content_area"):
             rect = self._content_area.rect()
             self._lyrics_panel.setGeometry(rect.adjusted(24, 12, -24, -12))
@@ -846,5 +1024,11 @@ class PlayerScreen(QFrame):
         """
         if not self._slide_anim.state() == QPropertyAnimation.State.Running:
             self.setGeometry(0, 0, new_size.width(), new_size.height())
+        if hasattr(self, "_bg_label_1") and hasattr(self, "_bg_label_2"):
+            w, h = new_size.width(), new_size.height()
+            self._bg_label_1.setGeometry(0, 0, w, h)
+            self._bg_label_2.setGeometry(0, 0, w, h)
+            self._bg_label_1.lower()
+            self._bg_label_2.lower()
         if self.isVisible():
             self.raise_()

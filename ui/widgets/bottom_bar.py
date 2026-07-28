@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QAction, QDrag
 from ui.widgets.clickable_label import ClickableLabel
+from ui.widgets.hover_bold_button import HoverBoldButton
 from ui.widgets.seek_bar import SeekBar
 from ui.svg_icon import svg_icon, svg_pixmap
 
@@ -272,7 +273,7 @@ class BottomBar(QFrame):
         self._is_default = True
 
     def _icon_btn(self, asset: str, size: int = _ICON_SIZE) -> QPushButton:
-        btn = QPushButton()
+        btn = HoverBoldButton()
         btn.setObjectName("iconButton")
         btn.setFixedSize(size + 16, size + 16)
         btn.setFlat(True)

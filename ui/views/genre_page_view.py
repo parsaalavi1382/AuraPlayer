@@ -18,6 +18,7 @@ from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTIST
 from ui.views.tracks_view import TrackHoverDelegate, HoverEventFilter
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
+from ui.widgets.hover_bold_button import HoverBoldButton
 
 
 class GenrePageView(QWidget):
@@ -57,11 +58,11 @@ class GenrePageView(QWidget):
 
         # Transport Buttons specific to the Genre
         buttons_layout = QHBoxLayout()
-        self.play_btn = QPushButton("▶  Play Genre")
+        self.play_btn = HoverBoldButton("▶  Play Genre")
         self.play_btn.setObjectName("accentButton")
         self.play_btn.clicked.connect(lambda: self._play_genre_tracks(shuffle=False))
 
-        self.shuffle_btn = QPushButton("🔀  Shuffle")
+        self.shuffle_btn = HoverBoldButton("🔀  Shuffle")
         self.shuffle_btn.clicked.connect(lambda: self._play_genre_tracks(shuffle=True))
 
         buttons_layout.addWidget(self.play_btn)

@@ -17,6 +17,8 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QLinearGradient, QPen
 
 from core.library_store import LibraryStore
 from core.models import Track
+from ui.theme import THEMES, DEFAULT_THEME, apply_theme_vars
+from ui.widgets.hover_bold_button import HoverBoldButton
 from mutagen import File as MutagenFile
 from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
@@ -450,7 +452,7 @@ class LyricsPanel(QFrame):
         controls_bar.setSpacing(12)
 
         # بازگشت دکمه Sync
-        self.sync_btn = QPushButton("Sync ↑")
+        self.sync_btn = HoverBoldButton("Sync ↑")
         self.sync_btn.setFixedSize(70, 30)
         self.sync_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         self.sync_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -459,7 +461,7 @@ class LyricsPanel(QFrame):
 
         controls_bar.addStretch()
 
-        self.edit_btn = QPushButton("✏ Edit")
+        self.edit_btn = HoverBoldButton("✏ Edit")
         self.edit_btn.setFixedSize(70, 30)
         self.edit_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         self.edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -480,25 +482,28 @@ class LyricsPanel(QFrame):
 
     def apply_theme(self, theme_colors: dict) -> None:
         self._theme_colors = theme_colors
-        bg = theme_colors.get("surface", "#1C1F26")
-        border = theme_colors.get("border", "#2E323C")
         accent = theme_colors.get("accent", "#6C5CE7")
         text = theme_colors.get("text_primary", "#EDEFF2")
 
-        self.scroll_area.setStyleSheet("background: transparent;")
-        self.scroll_content.setStyleSheet("background: transparent;")
+        self.setStyleSheet("background: transparent; border: none;")
+        self.scroll_area.setStyleSheet("background: transparent; border: none;")
+        self.scroll_content.setStyleSheet("background: transparent; border: none;")
+        if hasattr(self, "bottom_overlay"):
+            self.bottom_overlay.setStyleSheet("background: transparent; border: none;")
 
         button_style = f"""
             QPushButton {{
-                background-color: {bg};
+                background: transparent;
+                background-color: transparent;
                 color: {text};
-                border: 1px solid {border};
-                border-radius: 15px;
+                border: none;
                 font-weight: bold;
+                padding: 4px 8px;
             }}
             QPushButton:hover {{
-                background-color: {theme_colors.get("surface_hover", "#262A33")};
-                border-color: {accent};
+                color: {accent};
+                background: transparent;
+                background-color: transparent;
             }}
         """
         self.edit_btn.setStyleSheet(button_style)

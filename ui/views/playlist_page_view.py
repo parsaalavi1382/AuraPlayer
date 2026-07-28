@@ -24,8 +24,9 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen, QPixmap, QAction,
 from core.library_store import LibraryStore
 from core.models import Track
 from core.metadata_reader import get_album_art
-from ui.theme import THEMES, DEFAULT_THEME
+from ui.theme import THEMES, DEFAULT_THEME, apply_theme_vars
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
+from ui.widgets.hover_bold_button import HoverBoldButton
 from ui.widgets.drag_table_view import AuraDragTableView
 
 COL_TITLE = 0
@@ -954,7 +955,7 @@ class PlaylistPageView(QWidget):
             self.art_label.mousePressEvent = lambda e: self._change_cover() if e.button() == Qt.MouseButton.LeftButton else None
             
             if has_custom_cover:
-                revert_btn = QPushButton("✕ Revert Cover")
+                revert_btn = HoverBoldButton("✕ Revert Cover")
                 revert_btn.setObjectName("textButton")
                 revert_btn.setToolTip("Revert to automatic collage cover art")
                 revert_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -985,11 +986,11 @@ class PlaylistPageView(QWidget):
 
         # Action Buttons row
         btn_layout = QHBoxLayout()
-        play_btn = QPushButton("▶  Play All")
+        play_btn = HoverBoldButton("▶  Play All")
         play_btn.setObjectName("accentButton")
         play_btn.clicked.connect(lambda: self._play_playlist_tracks(shuffle=False))
 
-        shuf_btn = QPushButton("🔀  Shuffle")
+        shuf_btn = HoverBoldButton("🔀  Shuffle")
         shuf_btn.clicked.connect(lambda: self._play_playlist_tracks(shuffle=True))
 
         btn_layout.addWidget(play_btn)
@@ -997,9 +998,9 @@ class PlaylistPageView(QWidget):
 
         if not self.is_smart:
             # Custom Playlists can be Renamed or Deleted
-            rename_btn = QPushButton("✏  Rename")
+            rename_btn = HoverBoldButton("✏  Rename")
             rename_btn.clicked.connect(self._rename_playlist)
-            delete_btn = QPushButton("🗑  Delete")
+            delete_btn = HoverBoldButton("🗑  Delete")
             delete_btn.clicked.connect(self._delete_playlist)
             btn_layout.addWidget(rename_btn)
             btn_layout.addWidget(delete_btn)

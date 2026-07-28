@@ -152,13 +152,13 @@ and ready to swap in at the boundary), so it belongs in the same step as
 the rest of the playback engine rather than bolted on later.
 
 ## 16. Dynamic ambient background (Player Screen only)
-Extract prominent colors from the currently-playing track's album art
-and render a soft, blurred gradient halo behind the Player Screen.
-Explicitly NOT applied to the Main Menu/tabs screens -- those stay
-minimal.
-**Fits:** Step 4 (Player Screen), since the album art is front-and-center
-there for the first time and this is purely a Player-Screen-only visual
-treatment.
+**Status:** ✅ COMPLETED
+
+- **Windows Media Player Style Full-Bleed Blur:** Scaled and heavily blurred album cover image filling the entire `PlayerScreen` from edge-to-edge, top to bottom (including behind the seek bar, transport controls, and bottom panel).
+- **Theme-Aware Readability Overlay:** Dynamically overlays a subtle tint derived from `self._theme["bg"]` (~35% alpha) over the blurred cover, ensuring control legibility across all dark and light themes.
+- **Async Thread Safety & Rapid Skipping:** Multithreaded blur calculation via `QThreadPool` and `_BlurWorker` with incremental `request_id` tracking to instantly drop stale calculations during rapid track skips without UI freezes or memory leaks.
+- **Smooth Crossfading:** Dual-layer background (`_bg_label_1` and `_bg_label_2`) with crossfade animations over 220ms on track change.
+- **Fallback:** Smoothly fades out the blurred wash to a clean, neutral theme background when playing tracks without custom cover art.
 
 ## 17. Global smooth transitions
 **Status:** ✅ COMPLETED

@@ -18,7 +18,7 @@ from PyQt6.QtGui import QFont, QPixmap
 
 from core.library_store import LibraryStore
 from core.models import Track
-from core.metadata_reader import get_album_art
+from core.metadata_reader import get_album_art, clear_album_art_cache
 from core.metadata_writer import write_track_metadata
 from ui.theme import THEMES, DEFAULT_THEME
 from ui.svg_icon import svg_pixmap
@@ -210,6 +210,9 @@ class AlbumEditorDialog(QDialog):
                     track.has_embedded_art = True
 
                 self.store.cache.upsert_track(track)
+
+            # Clear cached artwork for this album so all views reload the updated cover
+            clear_album_art_cache()
 
             # Bulk save the cache once at the end for performance
             self.store.cache.save()

@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 
 from core.library_store import LibraryStore
 from core.playback_engine import PlaybackEngine
-from core.metadata_reader import get_album_art
+from core.metadata_reader import get_album_art, get_track_album_art
 from ui.theme import build_stylesheet, THEMES, DEFAULT_THEME
 from ui.svg_icon import clear_cache as clear_icon_cache
 from ui.widgets.top_bar import TopBar
@@ -709,17 +709,13 @@ class MainWindow(QMainWindow):
     def _load_and_push_art(self, track_path: str) -> None:
         """Load album art for track_path (may be None for untagged files)
         and push it to both the bottom bar thumbnail and Player Screen.
-        This is a synchronous read on the main thread -- acceptable for
-        single-track art loads at track-change time. If art loading ever
-        becomes a bottleneck for very large embedded images, move to a
-        QThread; at MAX_ARTWORK_SIZE=300 the decode is typically <5ms.
         """
-        art = get_album_art(track_path)
+        track = self.store.get_track(track_path) if track_path else None
+        art = get_track_album_art(track, self.store) if track else get_album_art(track_path)
         self.bottom_bar.set_art(art)
         self.player_screen.set_track(
-            self.store.get_track(track_path).title if self.store.get_track(track_path) else "",
-            ", ".join(self.store.get_track(track_path).artists)
-            if self.store.get_track(track_path) else "",
+            track.title if track else "",
+            ", ".join(track.artists) if track else "",
             art,
             track_path,
         )

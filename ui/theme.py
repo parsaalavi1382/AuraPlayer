@@ -157,6 +157,7 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
 
         QTabBar::tab:hover:!selected {{
             color: {c['text_primary']};
+            font-weight: bold;
         }}
 
         QTableView, QListView {{
@@ -203,8 +204,9 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             font-weight: 600;
         }}
 
-        QPushButton:hover {{
+        QPushButton:hover, QPushButton:hover:checked, QPushButton:hover:!checked {{
             background-color: {c['surface_hover']};
+            font-weight: bold;
         }}
 
         QPushButton:pressed {{
@@ -217,19 +219,35 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             color: white;
         }}
 
-        QPushButton#accentButton:hover {{
+        QPushButton#accentButton:hover, QPushButton#accentButton:hover:checked, QPushButton#accentButton:hover:!checked {{
             background-color: {c['accent_hover']};
+            font-weight: bold;
+        }}
+
+        QPushButton#textButton {{
+            background: transparent;
+            border: none;
+            color: {c['text_secondary']};
+        }}
+
+        QPushButton#textButton:hover, QPushButton#textButton:hover:checked, QPushButton#textButton:hover:!checked {{
+            color: {c['accent']};
+            font-weight: bold;
         }}
 
         QPushButton#iconButton {{
+            background: transparent;
             background-color: transparent;
             border: none;
             border-radius: 18px;
             padding: 6px;
         }}
 
-        QPushButton#iconButton:hover {{
-            background-color: {c['surface_hover']};
+        QPushButton#iconButton:hover, QPushButton#iconButton:checked, QPushButton#iconButton:checked:hover, QPushButton#iconButton:hover:!checked {{
+            background: transparent;
+            background-color: transparent;
+            border: none;
+            font-weight: bold;
         }}
 
         QLineEdit {{

@@ -351,3 +351,57 @@ def get_album_art(filepath: str) -> Optional[QPixmap]:
 
     _album_art_cache[filepath] = rounded
     return rounded
+
+
+_album_key_art_cache: dict[str, Optional[QPixmap]] = {}
+
+
+def clear_album_art_cache(filepath: Optional[str] = None, album_key: Optional[str] = None) -> None:
+    """Clear cached pixmaps when metadata/cover art is modified."""
+    if filepath and filepath in _album_art_cache:
+        del _album_art_cache[filepath]
+    if album_key and album_key in _album_key_art_cache:
+        del _album_key_art_cache[album_key]
+    if not filepath and not album_key:
+        _album_art_cache.clear()
+        _album_key_art_cache.clear()
+
+
+def get_track_album_art(track: Optional[Track], store: Optional[object] = None) -> Optional[QPixmap]:
+    """
+    Returns the album art QPixmap for a track.
+    If tracks belong to the same album, they share the exact same album cover
+    (prioritizing the cover art from the first song in that album that has art).
+    """
+    if not track:
+        return None
+
+    album_key = getattr(track, "album_key", None)
+    if album_key and album_key in _album_key_art_cache:
+        cached = _album_key_art_cache[album_key]
+        if cached is not None:
+            return cached
+
+    # Direct extraction for this track
+    direct_art = get_album_art(track.path)
+    if direct_art is not None:
+        if album_key:
+            _album_key_art_cache[album_key] = direct_art
+        return direct_art
+
+    # If this track has no embedded art, look up other tracks in the same album (prioritizing first track with art)
+    if store and album_key:
+        album_obj = store.get_album_by_key(album_key)
+        if album_obj and hasattr(album_obj, "tracks"):
+            for t in album_obj.tracks:
+                if t.path == track.path:
+                    continue
+                art = get_album_art(t.path)
+                if art is not None:
+                    _album_key_art_cache[album_key] = art
+                    _album_art_cache[track.path] = art
+                    return art
+
+    if album_key:
+        _album_key_art_cache[album_key] = None
+    return None
