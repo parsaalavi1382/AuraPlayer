@@ -25,6 +25,7 @@ from core.metadata_reader import get_album_art
 from ui.theme import THEMES, DEFAULT_THEME
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
+from ui.widgets.clickable_label import ClickableLabel
 
 COL_TRACK_NO = 0
 COL_TITLE = 1
@@ -729,38 +730,24 @@ class AlbumPageView(QWidget):
         self.title_label.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
         info_layout.addWidget(self.title_label)
 
-        # Artists row (underlined clickable)
+        # Artists row (underlined clickable, matching bottomBarArtist format)
         artist_row = QHBoxLayout()
-        artist_row.setSpacing(4)
+        artist_row.setSpacing(0)
         artist_row.setContentsMargins(0, 0, 0, 0)
         
-        artists_label = QLabel("by")
-        artists_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
+        artists_label = QLabel("by ")
+        artists_label.setObjectName("bottomBarArtistComma")
         artist_row.addWidget(artists_label)
 
         for i, art_name in enumerate(album_artists):
-            btn = QPushButton(art_name)
-            btn.setFlat(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet(apply_theme_vars("""
-                QPushButton {
-                    color: var(--accent);
-                    border: none;
-                    font-size: 14px;
-                    font-weight: bold;
-                    padding: 0;
-                    background: transparent;
-                }
-                QPushButton:hover {
-                    text-decoration: underline;
-                }
-            """, theme))
-            btn.clicked.connect(lambda checked, name=art_name: self.artist_requested.emit(name))
-            artist_row.addWidget(btn)
+            lbl = ClickableLabel(art_name, self)
+            lbl.setObjectName("bottomBarArtist")
+            lbl.clicked.connect(lambda name=art_name: self.artist_requested.emit(name))
+            artist_row.addWidget(lbl)
             
             if i < len(album_artists) - 1:
-                comma = QLabel(", ")
-                comma.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
+                comma = QLabel(", ", self)
+                comma.setObjectName("bottomBarArtistComma")
                 artist_row.addWidget(comma)
         artist_row.addStretch()
         info_layout.addLayout(artist_row)
