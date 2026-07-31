@@ -33,18 +33,35 @@ class LottieIconButton(HoverBoldButton):
         self._speed = 1.0
 
         self._current_frame = 0
-        self._state = 0  # 0 or 1
+        self._state = 0  # legacy
         self._target_frame = 0
+        self._transition_start_frame = 0
         self._direction = 1
         self._is_animating = False
         
         self._color_start: Optional[str] = None
         self._color_end: Optional[str] = None
         
+        self._state0_color: Optional[str] = None
+        self._state1_color: Optional[str] = None
+
+        self._custom_frame_0: Optional[int] = None
+        self._custom_frame_1: Optional[int] = None
+
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._advance_frame)
 
         self._load_animation()
+
+    def set_state_frames(self, frame_state_0: int, frame_state_1: int):
+        """Sets custom target frames for state 0 (on) and state 1 (off)."""
+        self._custom_frame_0 = frame_state_0
+        self._custom_frame_1 = frame_state_1
+
+    def set_state_colors(self, state0_color: str, state1_color: str):
+        """Sets target color for state 0 and state 1."""
+        self._state0_color = state0_color
+        self._state1_color = state1_color
 
     def _load_animation(self):
         if not HAS_RLOTTIE or not os.path.exists(self._lottie_path):
@@ -89,7 +106,19 @@ class LottieIconButton(HoverBoldButton):
             return
 
         self._state = state
-        self._target_frame = (self._total_frames - 1) if state == 1 else 0
+        default_frame_1 = self._total_frames - 1
+        target = self._custom_frame_0 if state == 0 else self._custom_frame_1
+        if target is None:
+            target = 0 if state == 0 else default_frame_1
+
+        self._target_frame = max(0, min(target, self._total_frames - 1))
+        self._transition_start_frame = self._current_frame
+
+        # Set transition colors if state colors are defined
+        target_color = self._state0_color if state == 0 else self._state1_color
+        if target_color:
+            self._color_start = self._color_end if self._color_end else target_color
+            self._color_end = target_color
 
         if not animated:
             self._current_frame = self._target_frame
@@ -99,6 +128,35 @@ class LottieIconButton(HoverBoldButton):
             return
 
         # Start animation towards target
+        if self._current_frame != self._target_frame:
+            self._direction = 1 if self._target_frame > self._current_frame else -1
+            self._is_animating = True
+            self._update_timer_interval()
+            self._timer.start()
+
+    def play_to(self, target_frame: int, target_color: str, animated: bool = True):
+        """Plays the animation to a specific frame, interpolating to target_color."""
+        if not self._animation or self._total_frames == 0:
+            return
+
+        # Current color becomes start color for this transition
+        self._color_start = self._color_end if self._color_end else (self._color_start or target_color)
+        self._color_end = target_color
+        
+        # Snap to 0 if we are at the end of the loop and need to play forward from the start
+        if self._current_frame >= self._total_frames - 2 and target_frame < self._current_frame:
+            self._current_frame = 0
+
+        self._target_frame = max(0, min(target_frame, self._total_frames - 1))
+        self._transition_start_frame = self._current_frame
+
+        if not animated:
+            self._current_frame = self._target_frame
+            self._is_animating = False
+            self._timer.stop()
+            self._render_current_frame()
+            return
+
         if self._current_frame != self._target_frame:
             self._direction = 1 if self._target_frame > self._current_frame else -1
             self._is_animating = True
@@ -142,9 +200,14 @@ class LottieIconButton(HoverBoldButton):
             
             # Apply color tint if specified
             tint_hex = None
-            if self._color_start and self._color_end and self._total_frames > 1:
-                t = self._current_frame / (self._total_frames - 1)
+            if self._color_start and self._color_end and self._transition_start_frame != self._target_frame:
+                # Interpolate based on transition progress
+                total_dist = abs(self._target_frame - self._transition_start_frame)
+                curr_dist = abs(self._current_frame - self._transition_start_frame)
+                t = curr_dist / total_dist if total_dist > 0 else 1.0
                 tint_hex = self._interpolate_color(self._color_start, self._color_end, t)
+            elif self._color_end:
+                tint_hex = self._color_end
             elif self._color_start:
                 tint_hex = self._color_start
 

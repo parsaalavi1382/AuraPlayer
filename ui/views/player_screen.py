@@ -406,7 +406,8 @@ class PlayerScreen(QFrame):
         self._next_btn.released.connect(self._on_next_released)
         transport.addWidget(self._next_btn)
 
-        self._repeat_btn = self._icon_btn("repeat", size=_ICON_SIZE)
+        self._repeat_btn = LottieIconButton(os.path.join("assets", "lottie", "repeat.json"), size=_ICON_SIZE)
+        self._repeat_btn.set_speed(2.5)
         self._repeat_btn.clicked.connect(self._on_repeat_clicked)
         transport.addWidget(self._repeat_btn)
 
@@ -456,7 +457,10 @@ class PlayerScreen(QFrame):
         self._volume_slider.valueChanged.connect(self._on_volume_slider_changed)
         toggles.addWidget(self._volume_slider)
 
-        self._mute_btn = self._icon_btn("Speaker_Icon", size=_ICON_SIZE)
+        mute_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "Sound_mute.json")
+        self._mute_btn = LottieIconButton(mute_lottie_path, size=_ICON_SIZE)
+        self._mute_btn.set_state_frames(10, 23)
+        self._mute_btn.set_speed(1.5)  # <-- You can change SPEED here
         self._mute_btn.clicked.connect(self._on_mute_clicked)
         toggles.addWidget(self._mute_btn)
 
@@ -632,10 +636,13 @@ class PlayerScreen(QFrame):
         if not self._theme:
             return
         text_primary = self._theme.get("text_primary", "#EDEFF2")
-        if self._volume == 0.0 or self._muted:
-            self._mute_btn.setIcon(svg_icon("Mute", text_primary, _ICON_SIZE))
-        else:
-            self._mute_btn.setIcon(svg_icon("Speaker_Icon", text_primary, _ICON_SIZE))
+        
+        if isinstance(self._mute_btn, LottieIconButton):
+            self._mute_btn.set_colors(text_primary, text_primary)
+            if self._volume == 0.0 or self._muted:
+                self._mute_btn.set_state(1, animated=True)
+            else:
+                self._mute_btn.set_state(0, animated=True)
 
     # ------------------------------------------------------------------
     # Lyrics / Queue panel animation
@@ -882,17 +889,16 @@ class PlayerScreen(QFrame):
         secondary = self._theme.get("text_secondary", "#9AA0AC")
 
         # Shuffle Lottie update
-        sh_color = accent if self._shuffle_on else secondary
-        self._shuffle_btn.set_colors(accent, secondary)
+        self._shuffle_btn.set_state_colors(accent, secondary)
         self._shuffle_btn.set_state(0 if self._shuffle_on else 1, animated=True)
 
-        # Repeat: accent+slash for off, accent for all, accent+"1" for one
+        # Repeat Lottie update
         if self._repeat_mode == "off":
-            self._repeat_btn.setIcon(svg_icon("repeat", secondary, _ICON_SIZE, slash=True))
+            self._repeat_btn.play_to(29, secondary, animated=True)
         elif self._repeat_mode == "all":
-            self._repeat_btn.setIcon(svg_icon("repeat", accent, _ICON_SIZE))
+            self._repeat_btn.play_to(10, accent, animated=True)
         else:  # "one"
-            self._repeat_btn.setIcon(svg_icon("repeat", accent, _ICON_SIZE, repeat_one=True))
+            self._repeat_btn.play_to(20, accent, animated=True)
 
     # ------------------------------------------------------------------
     # Theme application
