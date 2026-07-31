@@ -20,7 +20,6 @@ from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTIST
 from ui.views.tracks_view import TrackHoverDelegate, HoverEventFilter
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
-from ui.widgets.hover_bold_button import HoverBoldButton
 
 
 class AlbumCard(QWidget):
@@ -247,11 +246,11 @@ class ArtistPageView(QWidget):
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(12)
         
-        self.play_btn = HoverBoldButton("▶  Play Artist")
+        self.play_btn = QPushButton("▶  Play Artist")
         self.play_btn.setObjectName("accentButton")
         self.play_btn.clicked.connect(lambda: self._play_artist_tracks(shuffle=False))
         
-        self.shuffle_btn = HoverBoldButton("🔀  Shuffle")
+        self.shuffle_btn = QPushButton("🔀  Shuffle")
         self.shuffle_btn.clicked.connect(lambda: self._play_artist_tracks(shuffle=True))
 
         buttons_layout.addWidget(self.play_btn)

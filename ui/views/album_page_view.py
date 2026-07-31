@@ -23,7 +23,6 @@ from core.library_store import LibraryStore
 from core.models import Track
 from core.metadata_reader import get_album_art
 from ui.theme import THEMES, DEFAULT_THEME, apply_theme_vars
-from ui.widgets.hover_bold_button import HoverBoldButton
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
 from ui.widgets.clickable_label import ClickableLabel
@@ -769,14 +768,14 @@ class AlbumPageView(QWidget):
 
         # Play / Shuffle / Edit Album buttons
         btn_layout = QHBoxLayout()
-        play_btn = HoverBoldButton("▶  Play Album")
+        play_btn = QPushButton("▶  Play Album")
         play_btn.setObjectName("accentButton")
         play_btn.clicked.connect(lambda: self._play_album_tracks(album_tracks, shuffle=False))
 
-        shuf_btn = HoverBoldButton("🔀  Shuffle")
+        shuf_btn = QPushButton("🔀  Shuffle")
         shuf_btn.clicked.connect(lambda: self._play_album_tracks(album_tracks, shuffle=True))
 
-        edit_album_btn = HoverBoldButton("✏  Edit Album")
+        edit_album_btn = QPushButton("✏  Edit Album")
         edit_album_btn.clicked.connect(self._open_album_editor)
 
         btn_layout.addWidget(play_btn)

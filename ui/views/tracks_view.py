@@ -43,7 +43,6 @@ from core.library_store import LibraryStore
 from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTISTS, COL_ALBUM, COL_GENRE, COL_DURATION
 from ui.widgets.drag_table_view import AuraDragTableView
 from ui.widgets.empty_state import EmptyStateWidget
-from ui.widgets.hover_bold_button import HoverBoldButton
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 
 
@@ -70,10 +69,10 @@ class TracksView(QWidget):
         action_row.addWidget(self.stats_lbl)
         action_row.addStretch()
 
-        self.play_all_btn = HoverBoldButton("▶  Play All")
+        self.play_all_btn = QPushButton("▶  Play All")
         self.play_all_btn.setObjectName("accentButton")
         self.play_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.shuffle_btn = HoverBoldButton("🔀  Shuffle")
+        self.shuffle_btn = QPushButton("🔀  Shuffle")
         self.shuffle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         action_row.addWidget(self.play_all_btn)
         action_row.addWidget(self.shuffle_btn)

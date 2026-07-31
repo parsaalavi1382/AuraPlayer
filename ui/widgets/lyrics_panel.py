@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import re
-from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QVariantAnimation, QEasingCurve
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
     QFrame, QTextEdit, QDialog, QDialogButtonBox, QMessageBox, QSizePolicy,
@@ -247,8 +247,9 @@ class LyricLabel(QLabel):
         
         super().mousePressEvent(event)
 
-    def set_active(self, active: bool, position_seconds: float) -> None:
+    def set_active(self, active: bool, is_past: bool, position_seconds: float) -> None:
         self.is_active = active
+        self.is_past = is_past
         self.update_appearance(position_seconds)
 
     def update_appearance(self, position_seconds: float) -> None:
@@ -262,19 +263,42 @@ class LyricLabel(QLabel):
         text_secondary = self.theme_colors.get('text_secondary', '#9AA0AC')
         text_primary = self.theme_colors.get('text_primary', '#EDEFF2')
 
+        target_color_str = accent if (self.is_active or getattr(self, 'is_past', False)) else (text_primary if (self.hovered and self.is_synced) else text_secondary)
+        target_color = QColor(target_color_str)
+
+        if not hasattr(self, "_current_color") or self._current_color is None:
+            self._current_color = target_color
+
+        if self._current_color != target_color:
+            if not hasattr(self, "_color_anim"):
+                self._color_anim = QVariantAnimation(self)
+                self._color_anim.setDuration(200)
+                self._color_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+                self._color_anim.valueChanged.connect(self._on_color_val_changed)
+            self._color_anim.stop()
+            self._color_anim.setStartValue(self._current_color)
+            self._color_anim.setEndValue(target_color)
+            self._color_anim.start()
+
         font = QFont("Segoe UI", 16 if self.is_active else 13, QFont.Weight.Bold if self.is_active else QFont.Weight.Normal)
         if self.hovered and self.is_synced:
             font.setUnderline(True)
         self.setFont(font)
 
-        if self.is_active:
-            if not self.syllables:
-                self.setStyleSheet(f"color: {accent}; font-weight: bold; background-color: transparent; border: none; padding: 6px 12px;")
-            else:
-                self.setStyleSheet(f"background-color: transparent; border: none; padding: 6px 12px;")
+        cur_hex = self._current_color.name() if hasattr(self, "_current_color") else target_color_str
+        fw = "bold" if self.is_active else "normal"
+        if self.is_active and self.syllables:
+            self.setStyleSheet("background-color: transparent; border: none; padding: 6px 12px;")
         else:
-            color = text_primary if (self.hovered and self.is_synced) else text_secondary
-            self.setStyleSheet(f"color: {color}; background-color: transparent; border: none; padding: 6px 12px;")
+            self.setStyleSheet(f"color: {cur_hex}; font-weight: {fw}; background-color: transparent; border: none; padding: 6px 12px;")
+
+    def _on_color_val_changed(self, val: QColor) -> None:
+        self._current_color = val
+        cur_hex = val.name()
+        fw = "bold" if self.is_active else "normal"
+        if not (self.is_active and self.syllables):
+            self.setStyleSheet(f"color: {cur_hex}; font-weight: {fw}; background-color: transparent; border: none; padding: 6px 12px;")
+        self.update()
 
     def paintEvent(self, event) -> None:
         if self.is_active and self.syllables:
@@ -671,7 +695,9 @@ class LyricsPanel(QFrame):
         for i in range(self.lyrics_layout.count()):
             widget = self.lyrics_layout.itemAt(i).widget()
             if isinstance(widget, LyricLabel):
-                widget.set_active(i == self._active_lyric_idx, position_seconds)
+                is_active = (i == self._active_lyric_idx)
+                is_past = (i < self._active_lyric_idx and self._active_lyric_idx != -1)
+                widget.set_active(is_active, is_past, position_seconds)
 
     def _scroll_to_active(self, smooth: bool = True) -> None:
         if self._active_lyric_idx < 0 or self._active_lyric_idx >= self.lyrics_layout.count():

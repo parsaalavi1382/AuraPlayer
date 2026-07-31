@@ -157,7 +157,6 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
 
         QTabBar::tab:hover:!selected {{
             color: {c['text_primary']};
-            font-weight: bold;
         }}
 
         QTableView, QListView {{
@@ -204,9 +203,8 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             font-weight: 600;
         }}
 
-        QPushButton:hover, QPushButton:hover:checked, QPushButton:hover:!checked {{
+        QPushButton:hover {{
             background-color: {c['surface_hover']};
-            font-weight: bold;
         }}
 
         QPushButton:pressed {{
@@ -219,20 +217,21 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             color: white;
         }}
 
-        QPushButton#accentButton:hover, QPushButton#accentButton:hover:checked, QPushButton#accentButton:hover:!checked {{
+        QPushButton#accentButton:hover {{
             background-color: {c['accent_hover']};
-            font-weight: bold;
         }}
 
         QPushButton#textButton {{
             background: transparent;
+            background-color: transparent;
             border: none;
             color: {c['text_secondary']};
         }}
 
-        QPushButton#textButton:hover, QPushButton#textButton:hover:checked, QPushButton#textButton:hover:!checked {{
+        QPushButton#textButton:hover {{
+            background: transparent;
+            background-color: transparent;
             color: {c['accent']};
-            font-weight: bold;
         }}
 
         QPushButton#iconButton {{
@@ -243,11 +242,9 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             padding: 6px;
         }}
 
-        QPushButton#iconButton:hover, QPushButton#iconButton:checked, QPushButton#iconButton:checked:hover, QPushButton#iconButton:hover:!checked {{
+        QPushButton#iconButton:hover {{
             background: transparent;
             background-color: transparent;
-            border: none;
-            font-weight: bold;
         }}
 
         QLineEdit {{

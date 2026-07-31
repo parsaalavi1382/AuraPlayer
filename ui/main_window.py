@@ -125,6 +125,7 @@ class MainWindow(QMainWindow):
         self._tab_indicator_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         
         self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs.tabBar().setMouseTracking(True)
         self.tabs.tabBar().installEventFilter(self)
 
         self.tracks_view = TracksView(self.store, self.engine)
@@ -580,12 +581,13 @@ class MainWindow(QMainWindow):
             self._tab_indicator.setGeometry(target_rect)
             self._tab_indicator.show()
 
-    def _update_tab_icons(self) -> None:
+    def _update_tab_icons(self, hovered_idx: int = -1) -> None:
         from ui.theme import THEMES, DEFAULT_THEME
         
         theme_key = self.store.cache.settings.theme
         theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
         accent = theme.get("accent", "#6C5CE7")
+        primary = theme.get("text_primary", "#EDEFF2")
         neutral = theme.get("text_secondary", "#9AA0AC")
         
         if hasattr(self, "_tab_indicator"):
@@ -608,7 +610,12 @@ class MainWindow(QMainWindow):
         
         current_idx = self.tabs.currentIndex()
         for i, ic in enumerate(icons):
-            color = accent if i == current_idx else neutral
+            if i == current_idx:
+                color = accent
+            elif i == hovered_idx:
+                color = primary
+            else:
+                color = neutral
             if len(ic) > 1 and ic[1] == "asset":
                 icon = svg_icon(ic[0], color, 18)
             else:
@@ -617,8 +624,14 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, watched, event) -> bool:
         from PyQt6.QtCore import QEvent
-        if hasattr(self, "tabs") and watched == self.tabs.tabBar() and event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
-            self._update_tab_indicator(animate=False)
+        if hasattr(self, "tabs") and watched == self.tabs.tabBar():
+            if event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
+                self._update_tab_indicator(animate=False)
+            elif event.type() in (QEvent.Type.MouseMove, QEvent.Type.HoverMove):
+                idx = self.tabs.tabBar().tabAt(event.pos())
+                self._update_tab_icons(hovered_idx=idx)
+            elif event.type() in (QEvent.Type.Leave, QEvent.Type.HoverLeave):
+                self._update_tab_icons(hovered_idx=-1)
         return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------------

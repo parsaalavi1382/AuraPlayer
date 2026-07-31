@@ -19,7 +19,6 @@ from core.library_store import LibraryStore
 from ui.theme import THEMES, DEFAULT_THEME
 from ui.svg_icon import get_default_cover
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
-from ui.widgets.hover_bold_button import HoverBoldButton
 
 
 def get_playlist_collage(store: LibraryStore, playlist_id: str, size: int = 160, theme: dict = None) -> QPixmap:
@@ -340,7 +339,7 @@ class SmartPlaylistCard(QWidget):
             painter.drawPixmap(QRectF(16, 12, 24, 24), ico_px, QRectF(ico_px.rect()))
 
         painter.save()
-        font = QFont("Segoe UI", 10, QFont.Weight.Bold if getattr(self, 'is_hovered', False) else QFont.Weight.DemiBold)
+        font = QFont("Segoe UI", 10, QFont.Weight.DemiBold)
         painter.setFont(font)
         text_primary_color = fg if is_light else "#FFFFFF"
         painter.setPen(QColor(text_primary_color))
@@ -348,7 +347,7 @@ class SmartPlaylistCard(QWidget):
         painter.restore()
 
         painter.save()
-        font = QFont("Segoe UI", 8, QFont.Weight.Bold if getattr(self, 'is_hovered', False) else QFont.Weight.Normal)
+        font = QFont("Segoe UI", 8, QFont.Weight.Normal)
         painter.setFont(font)
         tracks_text = "1 track" if self.track_count == 1 else f"{self.track_count} tracks"
         painter.setPen(QColor(fg_sec))
@@ -447,8 +446,6 @@ class PlaylistDelegate(QStyledItemDelegate):
         playlist_name_text = pl_obj.name or "Untitled Playlist"
 
         font = QFont(option.font)
-        if index.row() == getattr(self, 'hovered_row', -1):
-            font.setBold(True)
         painter.setFont(font)
         from PyQt6.QtGui import QFontMetrics
         fm_bold = QFontMetrics(font)
@@ -676,8 +673,7 @@ class PlaylistsView(QWidget):
         self.header_layout.setContentsMargins(0, 4, 0, 4)
 
         # "+ Create Playlist" button
-        self.create_btn = HoverBoldButton("+ Create Playlist")
-        self.create_btn.setObjectName("textButton")
+        self.create_btn = QPushButton("+ Create Playlist")
         self.create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.create_btn.clicked.connect(self._on_create_playlist)
         self.header_layout.addWidget(self.create_btn)
