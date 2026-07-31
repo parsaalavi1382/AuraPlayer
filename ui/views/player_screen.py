@@ -376,7 +376,9 @@ class PlayerScreen(QFrame):
         transport.setSpacing(8)
         transport.addStretch()
 
-        self._shuffle_btn = self._icon_btn("shuffle", size=_ICON_SIZE)
+        shuffle_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "shuffle.json")
+        self._shuffle_btn = LottieIconButton(shuffle_lottie_path, size=18)
+        self._shuffle_btn.set_speed(2.5)
         self._shuffle_btn.setCheckable(True)
         self._shuffle_btn.clicked.connect(self._on_shuffle_clicked)
         transport.addWidget(self._shuffle_btn)
@@ -879,11 +881,10 @@ class PlayerScreen(QFrame):
         accent = self._theme.get("accent", "#6C5CE7")
         secondary = self._theme.get("text_secondary", "#9AA0AC")
 
-        # Shuffle: accent when on, secondary+slash when off
+        # Shuffle Lottie update
         sh_color = accent if self._shuffle_on else secondary
-        self._shuffle_btn.setIcon(
-            svg_icon("shuffle", sh_color, _ICON_SIZE, slash=not self._shuffle_on)
-        )
+        self._shuffle_btn.set_colors(accent, secondary)
+        self._shuffle_btn.set_state(0 if self._shuffle_on else 1, animated=True)
 
         # Repeat: accent+slash for off, accent for all, accent+"1" for one
         if self._repeat_mode == "off":

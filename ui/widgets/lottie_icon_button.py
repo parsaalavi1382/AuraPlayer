@@ -38,7 +38,8 @@ class LottieIconButton(HoverBoldButton):
         self._direction = 1
         self._is_animating = False
         
-        self._tint_color: Optional[str] = None
+        self._color_start: Optional[str] = None
+        self._color_end: Optional[str] = None
         
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._advance_frame)
@@ -63,10 +64,15 @@ class LottieIconButton(HoverBoldButton):
             interval = int(1000.0 / (self._fps * self._speed))
             self._timer.setInterval(max(1, interval))
 
-    def set_color(self, hex_color: str):
-        """Sets the color to tint the lottie frames."""
-        self._tint_color = hex_color
+    def set_colors(self, color_start: str, color_end: Optional[str] = None):
+        """Sets the color(s) to tint the lottie frames. If color_end is provided, it interpolates."""
+        self._color_start = color_start
+        self._color_end = color_end
         self._render_current_frame()
+
+    def set_color(self, hex_color: str):
+        """Sets a static color to tint the lottie frames."""
+        self.set_colors(hex_color)
 
     def set_speed(self, speed: float):
         """Sets the playback speed multiplier (e.g. 1.5 for 50% faster)."""
@@ -107,6 +113,15 @@ class LottieIconButton(HoverBoldButton):
         super().leaveEvent(event)
         self._render_current_frame()
 
+    def _interpolate_color(self, hex1: str, hex2: str, t: float) -> str:
+        c1 = QColor(hex1)
+        c2 = QColor(hex2)
+        r = int(c1.red() + (c2.red() - c1.red()) * t)
+        g = int(c1.green() + (c2.green() - c1.green()) * t)
+        b = int(c1.blue() + (c2.blue() - c1.blue()) * t)
+        a = int(c1.alpha() + (c2.alpha() - c1.alpha()) * t)
+        return QColor(r, g, b, a).name(QColor.NameFormat.HexArgb)
+
     def _render_current_frame(self):
         if not self._animation:
             return
@@ -126,14 +141,21 @@ class LottieIconButton(HoverBoldButton):
             pixmap = QPixmap.fromImage(qimg)
             
             # Apply color tint if specified
-            if self._tint_color:
+            tint_hex = None
+            if self._color_start and self._color_end and self._total_frames > 1:
+                t = self._current_frame / (self._total_frames - 1)
+                tint_hex = self._interpolate_color(self._color_start, self._color_end, t)
+            elif self._color_start:
+                tint_hex = self._color_start
+
+            if tint_hex:
                 colored = QPixmap(pixmap.size())
                 colored.fill(Qt.GlobalColor.transparent)
                 painter = QPainter(colored)
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
                 painter.drawPixmap(0, 0, pixmap)
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-                painter.fillRect(colored.rect(), QColor(self._tint_color))
+                painter.fillRect(colored.rect(), QColor(tint_hex))
                 painter.end()
                 pixmap = colored
                 

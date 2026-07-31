@@ -149,7 +149,9 @@ class BottomBar(QFrame):
         self.transport_layout.setContentsMargins(0, 0, 0, 0)
         self.transport_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.shuffle_button = self._icon_btn("shuffle", size=_ICON_SIZE)
+        shuffle_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "shuffle.json")
+        self.shuffle_button = LottieIconButton(shuffle_lottie_path, size=18)
+        self.shuffle_button.set_speed(2.5)
         self.shuffle_button.setCheckable(True)
         self.shuffle_button.clicked.connect(self._on_shuffle_clicked)
         self.transport_layout.addWidget(self.shuffle_button)
@@ -458,10 +460,10 @@ class BottomBar(QFrame):
         accent = self._theme.get("accent", "#6C5CE7")
         secondary = self._theme.get("text_secondary", "#9AA0AC")
 
+        # Shuffle Lottie update
         sh_color = accent if self._shuffle_on else secondary
-        self.shuffle_button.setIcon(
-            svg_icon("shuffle", sh_color, _ICON_SIZE, slash=not self._shuffle_on)
-        )
+        self.shuffle_button.set_colors(accent, secondary)
+        self.shuffle_button.set_state(0 if self._shuffle_on else 1, animated=True)
 
         if self._repeat_mode == "off":
             self.repeat_button.setIcon(svg_icon("repeat", secondary, _ICON_SIZE, slash=True))
