@@ -12,8 +12,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QAction, QDrag
 from ui.widgets.clickable_label import ClickableLabel
 from ui.widgets.hover_bold_button import HoverBoldButton
+from ui.widgets.lottie_icon_button import LottieIconButton
 from ui.widgets.seek_bar import SeekBar
 from ui.svg_icon import svg_icon, svg_pixmap
+import os
 
 from core.models import Track
 
@@ -156,7 +158,12 @@ class BottomBar(QFrame):
         self.prev_button.setProperty("transport", True)
         self.transport_layout.addWidget(self.prev_button)
 
-        self.play_pause_button = self._icon_btn("play", size=_ICON_SIZE + 4)
+        lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "play_pause.json")
+        self.play_pause_button = LottieIconButton(lottie_path, size=34)
+        
+        # NOTE: Change the speed here for ONLY the play/pause Lottie animation (e.g. 1.5 for faster, 0.5 for slower)
+        self.play_pause_button.set_speed(2.5)
+        
         self.play_pause_button.setProperty("transport", True)
         self.play_pause_button.clicked.connect(self.play_pause_clicked.emit)
         self.transport_layout.addWidget(self.play_pause_button)
@@ -286,8 +293,7 @@ class BottomBar(QFrame):
         text_secondary = theme.get("text_secondary", "#9AA0AC")
         
         self.prev_button.setIcon(svg_icon("prev", text_primary, _ICON_SIZE))
-        asset = "pause" if self._is_playing else "play"
-        self.play_pause_button.setIcon(svg_icon(asset, text_primary, _ICON_SIZE + 4))
+        self.play_pause_button.set_color(text_primary)
         self.next_button.setIcon(svg_icon("next", text_primary, _ICON_SIZE))
 
         heart_color = "#E05C5C" if self._heart_btn.isChecked() else text_secondary
@@ -537,11 +543,8 @@ class BottomBar(QFrame):
 
     def set_playing(self, is_playing: bool) -> None:
         self._is_playing = is_playing
-        asset = "pause" if is_playing else "play"
-        color = "#EDEFF2"
-        if self._theme:
-            color = self._theme.get("text_primary", "#EDEFF2")
-        self.play_pause_button.setIcon(svg_icon(asset, color, _ICON_SIZE + 4))
+        # state 0 = play, state 1 = pause
+        self.play_pause_button.set_state(1 if is_playing else 0, animated=True)
 
     def set_position(self, position_seconds: float, duration_seconds: float) -> None:
         self.seek_bar.set_position(position_seconds, duration_seconds)

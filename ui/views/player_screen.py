@@ -55,6 +55,8 @@ from ui.widgets.clickable_label import ClickableLabel
 from ui.widgets.queue_panel import QueuePanel
 from ui.widgets.lyrics_panel import LyricsPanel
 from ui.widgets.hover_bold_button import HoverBoldButton
+from ui.widgets.lottie_icon_button import LottieIconButton
+import os
 
 # Animation durations in ms
 _SLIDE_MS = 320          # slide-up / slide-down
@@ -384,7 +386,16 @@ class PlayerScreen(QFrame):
         self._prev_btn.released.connect(self._on_prev_released)
         transport.addWidget(self._prev_btn)
 
-        self._play_pause_btn = self._icon_btn("play", size=_ICON_SIZE_MAIN)
+        lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "play_pause.json")
+        
+        # NOTE: Change the size here for ONLY the play/pause Lottie animation in the player screen (e.g. 28 to 36)
+        lottie_size = 34
+        
+        self._play_pause_btn = LottieIconButton(lottie_path, size=lottie_size)
+        
+        # NOTE: Change the speed here for ONLY the play/pause Lottie animation in the player screen
+        self._play_pause_btn.set_speed(2.5)
+        
         self._play_pause_btn.clicked.connect(self.play_pause_clicked.emit)
         transport.addWidget(self._play_pause_btn)
 
@@ -823,10 +834,7 @@ class PlayerScreen(QFrame):
 
     def set_playing(self, is_playing: bool) -> None:
         self._is_playing = is_playing
-        if self._theme:
-            asset = "pause" if is_playing else "play"
-            color = self._theme.get("text_primary", "#EDEFF2")
-            self._play_pause_btn.setIcon(svg_icon(asset, color, _ICON_SIZE_MAIN))
+        self._play_pause_btn.set_state(1 if is_playing else 0, animated=True)
 
     def set_position(self, position_seconds: float, duration_seconds: float) -> None:
         self._seek_bar.set_position(position_seconds, duration_seconds)
@@ -920,8 +928,7 @@ class PlayerScreen(QFrame):
         self._back_btn.setIcon(svg_icon("back", text_primary, _ICON_SIZE))
         self._prev_btn.setIcon(svg_icon("prev", text_primary, _ICON_SIZE))
         self._next_btn.setIcon(svg_icon("next", text_primary, _ICON_SIZE))
-        asset = "pause" if self._is_playing else "play"
-        self._play_pause_btn.setIcon(svg_icon(asset, text_primary, _ICON_SIZE_MAIN))
+        self._play_pause_btn.set_color(text_primary)
 
         # Heart (outline = inactive, filled red = active)
         heart_color = "#E05C5C" if self._heart_btn.isChecked() else text_secondary
