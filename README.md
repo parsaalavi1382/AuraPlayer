@@ -22,6 +22,8 @@ I have officially published the **[v1.0.0 Official Release](https://github.com/p
 
 If you are on macOS or Linux, please feel free to download the release, run it, and let me know how it handles native audio output, fonts, and window framing.
 
+📢 **Telegram Channel:** Join our official Telegram channel [**@Auraplayer_app**](https://t.me/Auraplayer_app) to get real-time updates on new features, bug fixes, and upcoming releases so you won't miss anything!
+
 ---
 
 ## 🌟 Project Status: Official Release (v1.0.0)
