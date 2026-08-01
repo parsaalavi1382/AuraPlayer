@@ -107,12 +107,17 @@ class BottomBar(QFrame):
         main_layout.setContentsMargins(16, 8, 16, 8)
         main_layout.setSpacing(12)
 
+        self.left_widget = QWidget(self)
+        left_main_layout = QHBoxLayout(self.left_widget)
+        left_main_layout.setContentsMargins(0, 0, 0, 0)
+        left_main_layout.setSpacing(12)
+
         # Left: art thumbnail (بزرگ‌تر شدن سایز کاور آلبوم به 64)
         self.art_label = QLabel()
         self.art_label.setObjectName("bottomBarArt")
         self.art_label.setFixedSize(64, 64)
         self.art_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(self.art_label)
+        left_main_layout.addWidget(self.art_label)
 
         # Track info (تغییر به QVBoxLayout برای زیر هم قرار گرفتن، اما با فاصله صفر)
         text_layout = QVBoxLayout()
@@ -133,8 +138,12 @@ class BottomBar(QFrame):
         self.artist_layout.setSpacing(0)
         text_layout.addWidget(self.artist_container)
 
-        main_layout.addLayout(text_layout)
-        main_layout.addStretch()  # Perfectly balances and centers the middle widget
+        left_main_layout.addLayout(text_layout)
+        left_main_layout.addStretch()
+
+        # By giving both left and right widgets a stretch of 1, they divide the remaining
+        # space equally, which guarantees the center widget remains perfectly in the center.
+        main_layout.addWidget(self.left_widget, stretch=1)
 
         # --- Center container (controls + seek bar) ---
         self.center_widget = QWidget(self)
@@ -186,12 +195,10 @@ class BottomBar(QFrame):
         self.seek_bar.seek_requested.connect(self.seek_requested.emit)
         center_layout.addWidget(self.seek_bar)
 
-        main_layout.addWidget(self.center_widget)
-        main_layout.addStretch()  # Perfectly balances and centers the middle widget
+        main_layout.addWidget(self.center_widget, stretch=0)
 
         # --- Right container (toggles + volume) ---
         self.right_widget = QWidget(self)
-        self.right_widget.setFixedWidth(280)
         right_main_layout = QHBoxLayout(self.right_widget)
         right_main_layout.setContentsMargins(0, 0, 0, 0)
         right_main_layout.setSpacing(0)
@@ -253,7 +260,7 @@ class BottomBar(QFrame):
         self.right_layout.addLayout(self.volume_layout)
         right_main_layout.addLayout(self.right_layout)
 
-        main_layout.addWidget(self.right_widget)
+        main_layout.addWidget(self.right_widget, stretch=1)
 
         # --- Press-and-hold timers ---
         self._next_hold_timer = QTimer(self)

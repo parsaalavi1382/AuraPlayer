@@ -21,6 +21,7 @@ class AdjacentResizeHelper(QObject):
         self.store = store
         self.cache_key = cache_key
         self._is_resizing = False
+        self._ratios = None
 
         self.table = header.parentWidget()
         if self.table and self.table.viewport():
@@ -65,12 +66,14 @@ class AdjacentResizeHelper(QObject):
                 
             widths = [self.header.sectionSize(i) for i in range(col_count)]
             current_sum = sum(widths)
-            if current_sum <= 0:
-                return
-                
+            # Re-calculate ratios if they don't exist or column count changed
+            if not self._ratios or len(self._ratios) != col_count:
+                self._ratios = [w / current_sum for w in widths]
+
             self._is_resizing = True
             new_widths = []
             accumulated = 0
+            exact_accumulated = 0.0
             min_size = self.header.minimumSectionSize()
             if min_size < 30:
                 min_size = 30
@@ -79,8 +82,10 @@ class AdjacentResizeHelper(QObject):
                 if i == col_count - 1:
                     new_w = max(min_size, viewport_width - accumulated)
                 else:
-                    ratio = widths[i] / current_sum
-                    new_w = max(min_size, int(viewport_width * ratio))
+                    ratio = self._ratios[i]
+                    exact_w = viewport_width * ratio
+                    exact_accumulated += exact_w
+                    new_w = max(min_size, int(round(exact_accumulated)) - accumulated)
                     accumulated += new_w
                 new_widths.append(new_w)
                 
@@ -94,6 +99,9 @@ class AdjacentResizeHelper(QObject):
     def on_section_resized(self, index: int, old_size: int, new_size: int) -> None:
         if self._is_resizing:
             return
+
+        # User manually resized a column, invalidate cached ratios
+        self._ratios = None
 
         try:
             if index + 1 < self.header.count():
