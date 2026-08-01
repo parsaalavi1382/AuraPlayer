@@ -2,8 +2,12 @@
 
 import os
 import sys
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 block_cipher = None
+
+rlottie_datas = collect_data_files('rlottie_python')
+rlottie_binaries = collect_dynamic_libs('rlottie_python')
 
 # Resolve absolute path to project directory
 project_dir = os.path.abspath(os.path.dirname(__file__) if '__file__' in locals() else os.getcwd())
@@ -11,11 +15,11 @@ project_dir = os.path.abspath(os.path.dirname(__file__) if '__file__' in locals(
 a = Analysis(
     ['main.py'],
     pathex=[project_dir],
-    binaries=[],
+    binaries=rlottie_binaries,
     datas=[
         # Include all SVG icons and PNG logo assets from the assets directory
         (os.path.join(project_dir, 'assets'), 'assets'),
-    ],
+    ] + rlottie_datas,
     hiddenimports=[
         # Ensure mutagen and QtSvg are bundled correctly
         'mutagen',
