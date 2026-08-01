@@ -13,20 +13,22 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ---
 
-### 🚀 Official Release Binaries & Downloads
+### 🚀 Official Release Binaries & Cross-Platform Download
 
 I have officially published the **[v1.0.0 Official Release](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/v1.0.0)** with compiled binaries for **Windows, macOS, and Linux**.
 
 * **Windows:** Fully packaged and verified using Inno Setup (`installer.iss`). Includes both full installation wizard (`AuraPlayer_Setup_v1.0.0.exe`) and portable single-folder build (`AuraPlayer_Windows.zip`).
-* **macOS & Linux:** Compiled and packaged automatically via GitHub Actions pipelines (`release.yml`).
+* **macOS & Linux:** The build pipelines are configured via GitHub Actions (`release.yml`), but since I do not have physical access to a Mac or Linux machine to test all environment hooks, **your feedback is deeply appreciated!**
+
+If you are on macOS or Linux, please feel free to download the release, run it, and let me know how it handles native audio output, fonts, and window framing.
 
 ---
 
 ## 🌟 Project Status: Official Release (v1.0.0)
 
-AuraPlayer v1.0.0 is officially released! Core features including gapless playback, Lottie vector animations, live search overlay, library sync, metadata editing, LRC lyric sync, custom playlists, and dynamic theme switching are fully implemented and stable.
+AuraPlayer v1.0.0 is officially released! Core features including gapless audio playback, Lottie vector animations, player screen background blur, live search overlay, library folder synchronization, song tag editing, LRC lyric sync, custom playlists, and dynamic theme transitions are fully functional.
 
-🐛 **Found an issue?** If you run into any bugs or have feature suggestions, please open a ticket in the **Issues** section.
+🐛 **Found an issue?** If you run into any bugs or have suggestions, please open a ticket in the **Issues** section.
 
 🤝 **Contributions:** Pull requests are warmly welcomed! Feel free to fork the repository and contribute.
 
@@ -53,16 +55,17 @@ AuraPlayer v1.0.0 is officially released! Core features including gapless playba
 * **Smart Closable Tabs:** Dynamically opened pages can be closed with an "X" button, while permanent main navigation tabs (Tracks, Artists, Genres, Albums, Playlists) are securely locked in place.
 * **Underlined Hover Feedback:** Hovering over artist or album names anywhere in the app displays elegant underlines with pointing-hand feedback; clicking them takes you directly to their dedicated pages.
 
-### 2. Cover Art with Active Playback States & Vector Placeholders
+### 2. Cover Art, Background Blur & Active Playback States
 * Displays high-quality album covers or beautiful, theme-adaptive vector placeholders (using `disc.svg` dynamically colored by the active theme, completely removing raw emojis or text-character fallback icons).
+* **Player Screen Background Blur:** Features a dynamic, blurred backdrop overlay derived from album cover artwork for an immersive full-screen listening experience.
 * **State A (PLAYING):** Cover art dims slightly and displays a beautiful, pulsing 3-bar animated equalizer.
 * **State B (PAUSED + HOVER):** Cover art dims and displays an overlaid "▶" play icon.
 * **State C (PAUSED + NO HOVER):** Cover art renders at full brightness with no overlays.
 
-### 3. Advanced Audio Player Engine & Dynamic Lottie Controls
+### 3. Advanced Audio Player Engine & Lottie Animated Controls
 * Plays popular music formats including `.mp3`, `.flac`, `.m4a`, `.wav`, and `.ogg` files.
-* **Vector Lottie Animated Controls:** Features interactive Lottie animations for Play/Pause, Shuffle, Repeat, Mute, and Favorite Heart icons with real-time theme-aware color tinting and micro-interactions.
-* **Centered Transport Controls:** Perfect horizontal layout alignment keeping transport controls centered across all window dimensions.
+* **Interactive Lottie Vector Controls:** Powered by `rlottie-python`, featuring smooth vector animations for Play/Pause, Shuffle, Repeat, Mute, and Favorite Heart buttons with real-time theme-aware color tinting and micro-interactions.
+* **Dead-Centered Transport Bar:** Perfectly balanced horizontal layout alignment keeping playback controls centered across any window size.
 * **Silence-Free Playback:** Automatically preloads the next song in the background to hand off seamlessly near the end of the current track, ensuring no silent gaps between songs.
 * **Smart Music Controls:** Precise single-clicks for track skipping, press-and-hold for continuous fast-forward or rewind (seeking) inside a song, and a smart rewind button (restarts the current song if played past 3 seconds; otherwise skips to the actual previous song).
 * **Remember Play State:** Automatically remembers your queue, active song, volume level, and exact listening position across restarts so you can resume listening instantly.
