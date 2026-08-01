@@ -210,7 +210,9 @@ class BottomBar(QFrame):
         self._lyrics_btn.clicked.connect(self._on_lyrics_clicked)
         self.right_buttons_layout.addWidget(self._lyrics_btn)
 
-        self._heart_btn = self._icon_btn("heart", size=_ICON_SIZE)
+        heart_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "heart.json")
+        self._heart_btn = LottieIconButton(heart_lottie_path, size=_ICON_SIZE)
+        self._heart_btn.set_speed(1.5)
         self._heart_btn.setCheckable(True)
         self._heart_btn.clicked.connect(self._on_heart_clicked)
         self.right_buttons_layout.addWidget(self._heart_btn)
@@ -303,7 +305,7 @@ class BottomBar(QFrame):
         self.next_button.setIcon(svg_icon("next", text_primary, _ICON_SIZE))
 
         heart_color = "#E05C5C" if self._heart_btn.isChecked() else text_secondary
-        self._heart_btn.setIcon(svg_icon("heart", heart_color, _ICON_SIZE, filled=self._heart_btn.isChecked()))
+        self._heart_btn.set_color(None)
 
         self._refresh_mode_icons()
         self._update_toggle_styles()
@@ -364,15 +366,16 @@ class BottomBar(QFrame):
         active = self._heart_btn.isChecked()
         if self._theme:
             color = "#E05C5C" if active else self._theme.get("text_secondary", "#9AA0AC")
-            self._heart_btn.setIcon(svg_icon("heart", color, _ICON_SIZE, filled=active))
+            target_frame = self._heart_btn._total_frames - 1 if active else 0
+            self._heart_btn.play_to(target_frame, None, animated=True)
         if self._current_track:
             self.favorite_toggled.emit(self._current_track.path, active)
 
-    def set_favorited(self, favorited: bool) -> None:
+    def set_favorited(self, favorited: bool, animated: bool = False) -> None:
         self._heart_btn.setChecked(favorited)
         text_secondary = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
-        heart_color = "#E05C5C" if favorited else text_secondary
-        self._heart_btn.setIcon(svg_icon("heart", heart_color, _ICON_SIZE, filled=favorited))
+        target_frame = self._heart_btn._total_frames - 1 if favorited else 0
+        self._heart_btn.play_to(target_frame, None, animated=animated)
 
     def _on_queue_clicked(self) -> None:
         self.queue_clicked.emit()
@@ -472,17 +475,19 @@ class BottomBar(QFrame):
         self.shuffle_button.set_state(0 if self._shuffle_on else 1, animated=True)
 
         if self._repeat_mode == "off":
-            self.repeat_button.play_to(29, secondary, animated=True)
+            self.repeat_button.play_to(29, secondary, animated=True, forward_only=True)
         elif self._repeat_mode == "all":
-            self.repeat_button.play_to(10, accent, animated=True)
+            self.repeat_button.play_to(10, accent, animated=True, forward_only=True)
         else:  # "one"
-            self.repeat_button.play_to(20, accent, animated=True)
+            self.repeat_button.play_to(20, accent, animated=True, forward_only=True)
 
     def _update_toggle_styles(self) -> None:
         if not self._theme:
             return
         secondary = self._theme.get("text_secondary", "#9AA0AC")
         accent = self._theme.get("accent", "#6C5CE7")
+
+        self._heart_btn.set_native_colors({"#7A869B": secondary})
 
         self._lyrics_btn.setIcon(svg_icon("lyric", secondary, _ICON_SIZE))
         q_color = accent if self._queue_active else secondary

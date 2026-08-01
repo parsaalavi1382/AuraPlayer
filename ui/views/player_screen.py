@@ -432,7 +432,9 @@ class PlayerScreen(QFrame):
         self._lyrics_btn.clicked.connect(self._on_lyrics_clicked)
         toggles.addWidget(self._lyrics_btn)
 
-        self._heart_btn = self._icon_btn("heart", size=_ICON_SIZE)
+        heart_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "heart.json")
+        self._heart_btn = LottieIconButton(heart_lottie_path, size=_ICON_SIZE)
+        self._heart_btn.set_speed(1.5)
         self._heart_btn.setCheckable(True)
         self._heart_btn.clicked.connect(self._on_heart_clicked)
         toggles.addWidget(self._heart_btn)
@@ -530,15 +532,16 @@ class PlayerScreen(QFrame):
         active = self._heart_btn.isChecked()
         if self._theme:
             color = "#E05C5C" if active else self._theme.get("text_secondary", "#9AA0AC")
-            self._heart_btn.setIcon(svg_icon("heart", color, _ICON_SIZE, filled=active))
+            target_frame = self._heart_btn._total_frames - 1 if active else 0
+            self._heart_btn.play_to(target_frame, None, animated=True)
         if self._current_path:
             self.favorite_toggled.emit(self._current_path, active)
 
-    def set_favorited(self, favorited: bool) -> None:
+    def set_favorited(self, favorited: bool, animated: bool = False) -> None:
         self._heart_btn.setChecked(favorited)
         text_secondary = self._theme.get("text_secondary", "#9AA0AC") if self._theme else "#9AA0AC"
-        heart_color = "#E05C5C" if favorited else text_secondary
-        self._heart_btn.setIcon(svg_icon("heart", heart_color, _ICON_SIZE, filled=favorited))
+        target_frame = self._heart_btn._total_frames - 1 if favorited else 0
+        self._heart_btn.play_to(target_frame, None, animated=animated)
 
     def _on_shuffle_clicked(self) -> None:
         self.shuffle_clicked.emit()
@@ -706,6 +709,8 @@ class PlayerScreen(QFrame):
         accent = self._theme.get("accent", "#6C5CE7")
         secondary = self._theme.get("text_secondary", "#9AA0AC")
         surface = self._theme.get("surface", "#1C1F26")
+
+        self._heart_btn.set_native_colors({"#7A869B": secondary})
 
         # Queue: grayed (secondary) when inactive, theme color when active
         q_color = accent if self._queue_active else secondary
@@ -894,11 +899,11 @@ class PlayerScreen(QFrame):
 
         # Repeat Lottie update
         if self._repeat_mode == "off":
-            self._repeat_btn.play_to(29, secondary, animated=True)
+            self._repeat_btn.play_to(29, secondary, animated=True, forward_only=True)
         elif self._repeat_mode == "all":
-            self._repeat_btn.play_to(10, accent, animated=True)
+            self._repeat_btn.play_to(10, accent, animated=True, forward_only=True)
         else:  # "one"
-            self._repeat_btn.play_to(20, accent, animated=True)
+            self._repeat_btn.play_to(20, accent, animated=True, forward_only=True)
 
     # ------------------------------------------------------------------
     # Theme application

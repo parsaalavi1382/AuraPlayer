@@ -39,6 +39,8 @@ class LottieIconButton(HoverBoldButton):
         self._direction = 1
         self._is_animating = False
         
+        self._native_colors_map: dict[str, str] = {}
+        
         self._color_start: Optional[str] = None
         self._color_end: Optional[str] = None
         
@@ -63,12 +65,53 @@ class LottieIconButton(HoverBoldButton):
         self._state0_color = state0_color
         self._state1_color = state1_color
 
+    def set_native_colors(self, color_map: dict[str, str]):
+        """
+        Replaces specific hardcoded hex colors in the Lottie JSON with new hex colors,
+        preserving the original animation structure (avoids flattening like set_color).
+        """
+        self._native_colors_map = color_map
+        self._load_animation()
+
+    def _hex_to_rgb_float(self, hex_str: str) -> list[float]:
+        hex_str = hex_str.lstrip('#')
+        return [int(hex_str[0:2], 16)/255.0, int(hex_str[2:4], 16)/255.0, int(hex_str[4:6], 16)/255.0, 1.0]
+
+    def _replace_colors_recursive(self, obj, color_map_floats: dict[tuple, list[float]]):
+        if isinstance(obj, dict):
+            if 'c' in obj and isinstance(obj['c'], dict) and 'k' in obj['c']:
+                k = obj['c']['k']
+                if isinstance(k, list) and len(k) == 4 and isinstance(k[0], (int, float)):
+                    for orig_f, new_f in color_map_floats.items():
+                        if all(abs(a - b) < 0.01 for a, b in zip(k, orig_f)):
+                            obj['c']['k'] = new_f
+            for v in obj.values():
+                self._replace_colors_recursive(v, color_map_floats)
+        elif isinstance(obj, list):
+            for item in obj:
+                self._replace_colors_recursive(item, color_map_floats)
+
     def _load_animation(self):
         if not HAS_RLOTTIE or not os.path.exists(self._lottie_path):
             return
             
         try:
-            self._animation = rlottie_python.LottieAnimation.from_file(self._lottie_path)
+            if self._native_colors_map:
+                import json
+                with open(self._lottie_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                # Convert color map to float tuples for fast matching
+                float_map = {}
+                for orig_hex, new_hex in self._native_colors_map.items():
+                    float_map[tuple(self._hex_to_rgb_float(orig_hex))] = self._hex_to_rgb_float(new_hex)
+                    
+                self._replace_colors_recursive(data, float_map)
+                json_str = json.dumps(data)
+                self._animation = rlottie_python.LottieAnimation.from_data(json_str, resource_path="")
+            else:
+                self._animation = rlottie_python.LottieAnimation.from_file(self._lottie_path)
+                
             self._total_frames = self._animation.lottie_animation_get_totalframe()
             self._fps = float(self._animation.lottie_animation_get_framerate() or 60.0)
             self._update_timer_interval()
@@ -134,7 +177,7 @@ class LottieIconButton(HoverBoldButton):
             self._update_timer_interval()
             self._timer.start()
 
-    def play_to(self, target_frame: int, target_color: str, animated: bool = True):
+    def play_to(self, target_frame: int, target_color: Optional[str] = None, animated: bool = True, forward_only: bool = False):
         """Plays the animation to a specific frame, interpolating to target_color."""
         if not self._animation or self._total_frames == 0:
             return
@@ -144,7 +187,7 @@ class LottieIconButton(HoverBoldButton):
         self._color_end = target_color
         
         # Snap to 0 if we are at the end of the loop and need to play forward from the start
-        if self._current_frame >= self._total_frames - 2 and target_frame < self._current_frame:
+        if forward_only and self._current_frame >= self._total_frames - 2 and target_frame < self._current_frame:
             self._current_frame = 0
 
         self._target_frame = max(0, min(target_frame, self._total_frames - 1))
@@ -195,7 +238,7 @@ class LottieIconButton(HoverBoldButton):
                 height=h
             )
             raw_data = pil_img.tobytes("raw", "RGBA")
-            qimg = QImage(raw_data, w, h, QImage.Format.Format_RGBA8888)
+            qimg = QImage(raw_data, w, h, QImage.Format.Format_RGBA8888_Premultiplied)
             pixmap = QPixmap.fromImage(qimg)
             
             # Apply color tint if specified

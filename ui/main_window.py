@@ -1005,16 +1005,16 @@ class MainWindow(QMainWindow):
 
     def _on_favorite_toggled(self, track_path: str, favorited: bool) -> None:
         self.store.set_track_favorited(track_path, favorited)
-        self.bottom_bar.set_favorited(favorited)
-        self.player_screen.set_favorited(favorited)
+        self.bottom_bar.set_favorited(favorited, animated=True)
+        self.player_screen.set_favorited(favorited, animated=True)
 
     def _on_playlists_changed(self, playlist_id: str) -> None:
         if playlist_id == "smart_favorites":
             current = self.engine.get_current_track()
             if current:
                 is_fav = self.store.is_track_favorited(current.path)
-                self.bottom_bar.set_favorited(is_fav)
-                self.player_screen.set_favorited(is_fav)
+                self.bottom_bar.set_favorited(is_fav, animated=True)
+                self.player_screen.set_favorited(is_fav, animated=True)
 
     def open_playlist_page(self, playlist_id: str) -> None:
         self._close_player_screen()
