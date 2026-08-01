@@ -72,8 +72,11 @@ jobs:
       - name: Compile Inno Setup Installer
         if: matrix.os == 'windows-latest'
         run: |
-          # Windows-latest runners have ISCC pre-installed and available in PATH
-          iscc installer.iss
+          if (Get-Command "iscc" -ErrorAction SilentlyContinue) {
+            iscc installer.iss
+          } else {
+            & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          }
 
       # Packaging Phase
       - name: Package Release Assets (Windows)
