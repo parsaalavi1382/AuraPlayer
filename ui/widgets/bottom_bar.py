@@ -15,6 +15,7 @@ from ui.widgets.hover_bold_button import HoverBoldButton
 from ui.widgets.lottie_icon_button import LottieIconButton
 from ui.widgets.seek_bar import SeekBar
 from ui.svg_icon import svg_icon, svg_pixmap
+from utils.paths import get_resource_path
 import os
 
 from core.models import Track
@@ -158,7 +159,7 @@ class BottomBar(QFrame):
         self.transport_layout.setContentsMargins(0, 0, 0, 0)
         self.transport_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        shuffle_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "shuffle.json")
+        shuffle_lottie_path = get_resource_path("assets", "lottie", "shuffle.json")
         self.shuffle_button = LottieIconButton(shuffle_lottie_path, size=18)
         self.shuffle_button.set_speed(2.5)
         self.shuffle_button.setCheckable(True)
@@ -169,7 +170,7 @@ class BottomBar(QFrame):
         self.prev_button.setProperty("transport", True)
         self.transport_layout.addWidget(self.prev_button)
 
-        lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "play_pause.json")
+        lottie_path = get_resource_path("assets", "lottie", "play_pause.json")
         self.play_pause_button = LottieIconButton(lottie_path, size=34)
         
         # NOTE: Change the speed here for ONLY the play/pause Lottie animation (e.g. 1.5 for faster, 0.5 for slower)
@@ -183,7 +184,7 @@ class BottomBar(QFrame):
         self.next_button.setProperty("transport", True)
         self.transport_layout.addWidget(self.next_button)
 
-        self.repeat_button = LottieIconButton(os.path.join("assets", "lottie", "repeat.json"), size=_ICON_SIZE)
+        self.repeat_button = LottieIconButton(get_resource_path("assets", "lottie", "repeat.json"), size=_ICON_SIZE)
         self.repeat_button.set_speed(2.5)
         self.repeat_button.clicked.connect(self._on_repeat_clicked)
         self.transport_layout.addWidget(self.repeat_button)
@@ -217,7 +218,7 @@ class BottomBar(QFrame):
         self._lyrics_btn.clicked.connect(self._on_lyrics_clicked)
         self.right_buttons_layout.addWidget(self._lyrics_btn)
 
-        heart_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "heart.json")
+        heart_lottie_path = get_resource_path("assets", "lottie", "heart.json")
         self._heart_btn = LottieIconButton(heart_lottie_path, size=_ICON_SIZE)
         self._heart_btn.set_speed(1.5)
         self._heart_btn.setCheckable(True)
@@ -250,7 +251,7 @@ class BottomBar(QFrame):
         self._volume_slider.valueChanged.connect(self._on_volume_slider_changed)
         self.volume_layout.addWidget(self._volume_slider)
 
-        mute_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "Sound_mute.json")
+        mute_lottie_path = get_resource_path("assets", "lottie", "Sound_mute.json")
         self._mute_btn = LottieIconButton(mute_lottie_path, size=_ICON_SIZE)
         self._mute_btn.set_state_frames(10, 23)
         self._mute_btn.set_speed(1.5)  # <-- You can change SPEED here

@@ -56,6 +56,7 @@ from ui.widgets.queue_panel import QueuePanel
 from ui.widgets.lyrics_panel import LyricsPanel
 from ui.widgets.hover_bold_button import HoverBoldButton
 from ui.widgets.lottie_icon_button import LottieIconButton
+from utils.paths import get_resource_path
 import os
 
 # Animation durations in ms
@@ -376,7 +377,7 @@ class PlayerScreen(QFrame):
         transport.setSpacing(8)
         transport.addStretch()
 
-        shuffle_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "shuffle.json")
+        shuffle_lottie_path = get_resource_path("assets", "lottie", "shuffle.json")
         self._shuffle_btn = LottieIconButton(shuffle_lottie_path, size=18)
         self._shuffle_btn.set_speed(2.5)
         self._shuffle_btn.setCheckable(True)
@@ -388,7 +389,7 @@ class PlayerScreen(QFrame):
         self._prev_btn.released.connect(self._on_prev_released)
         transport.addWidget(self._prev_btn)
 
-        lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "play_pause.json")
+        lottie_path = get_resource_path("assets", "lottie", "play_pause.json")
         
         # NOTE: Change the size here for ONLY the play/pause Lottie animation in the player screen (e.g. 28 to 36)
         lottie_size = 34
@@ -406,7 +407,7 @@ class PlayerScreen(QFrame):
         self._next_btn.released.connect(self._on_next_released)
         transport.addWidget(self._next_btn)
 
-        self._repeat_btn = LottieIconButton(os.path.join("assets", "lottie", "repeat.json"), size=_ICON_SIZE)
+        self._repeat_btn = LottieIconButton(get_resource_path("assets", "lottie", "repeat.json"), size=_ICON_SIZE)
         self._repeat_btn.set_speed(2.5)
         self._repeat_btn.clicked.connect(self._on_repeat_clicked)
         transport.addWidget(self._repeat_btn)
@@ -432,7 +433,7 @@ class PlayerScreen(QFrame):
         self._lyrics_btn.clicked.connect(self._on_lyrics_clicked)
         toggles.addWidget(self._lyrics_btn)
 
-        heart_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "heart.json")
+        heart_lottie_path = get_resource_path("assets", "lottie", "heart.json")
         self._heart_btn = LottieIconButton(heart_lottie_path, size=_ICON_SIZE)
         self._heart_btn.set_speed(1.5)
         self._heart_btn.setCheckable(True)
@@ -459,7 +460,7 @@ class PlayerScreen(QFrame):
         self._volume_slider.valueChanged.connect(self._on_volume_slider_changed)
         toggles.addWidget(self._volume_slider)
 
-        mute_lottie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "lottie", "Sound_mute.json")
+        mute_lottie_path = get_resource_path("assets", "lottie", "Sound_mute.json")
         self._mute_btn = LottieIconButton(mute_lottie_path, size=_ICON_SIZE)
         self._mute_btn.set_state_frames(10, 23)
         self._mute_btn.set_speed(1.5)  # <-- You can change SPEED here
