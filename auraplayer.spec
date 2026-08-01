@@ -8,6 +8,7 @@ block_cipher = None
 
 rlottie_datas = collect_data_files('rlottie_python')
 rlottie_binaries = collect_dynamic_libs('rlottie_python')
+qtawesome_datas = collect_data_files('qtawesome')
 
 # Resolve absolute path to project directory
 project_dir = os.path.abspath(os.path.dirname(__file__) if '__file__' in locals() else os.getcwd())
@@ -19,7 +20,7 @@ a = Analysis(
     datas=[
         # Include all SVG icons and PNG logo assets from the assets directory
         (os.path.join(project_dir, 'assets'), 'assets'),
-    ] + rlottie_datas,
+    ] + rlottie_datas + qtawesome_datas,
     hiddenimports=[
         # Ensure mutagen and QtSvg are bundled correctly
         'mutagen',
@@ -34,6 +35,7 @@ a = Analysis(
         'mutagen.wave',
         'PyQt6.QtSvg',
         'rlottie_python',
+        'qtawesome',
     ],
     hookspath=[],
     hooksconfig={},

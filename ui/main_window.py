@@ -15,11 +15,13 @@ Step 3+4 additions:
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, Qt, QPropertyAnimation, QParallelAnimationGroup, QEasingCurve, QRect, QPoint, QEvent, QTimer
 from PyQt6.QtGui import QShortcut, QKeySequence
+from PyQt6.QtMultimedia import QMediaDevices
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTabBar,
     QMessageBox, QApplication, QStackedWidget, QFrame, QPushButton, QLabel,
+    QGraphicsOpacityEffect,
 )
 
 from core.library_store import LibraryStore
