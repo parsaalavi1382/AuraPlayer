@@ -1309,7 +1309,17 @@ class PlaylistPageView(QWidget):
                 remove_act.triggered.connect(lambda: self._remove_track_by_index(index.row()))
             menu.addAction(remove_act)
 
+        menu.addSeparator()
+        properties_act = QAction("Properties", self)
+        properties_act.triggered.connect(lambda: self._on_show_properties(track))
+        menu.addAction(properties_act)
+
         menu.exec(self.table.mapToGlobal(pos))
+
+    def _on_show_properties(self, track) -> None:
+        from ui.widgets.properties_dialog import PropertiesDialog
+        dialog = PropertiesDialog(track, self.store, self)
+        dialog.exec()
 
     def _remove_track_by_index(self, row: int) -> None:
         try:

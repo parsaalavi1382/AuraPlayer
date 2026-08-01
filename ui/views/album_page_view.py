@@ -911,16 +911,26 @@ class AlbumPageView(QWidget):
         menu.addAction(edit_action)
         menu.addAction(remove_action)
         menu.addAction(add_playlist_action)
+        
+        menu.addSeparator()
+        properties_action = QAction("Properties", self)
+        menu.addAction(properties_action)
 
         edit_action.triggered.connect(lambda: self._on_edit_metadata(track))
         remove_action.triggered.connect(lambda: self._on_remove_song(track))
         add_playlist_action.triggered.connect(lambda: self._on_add_to_playlist(track))
+        properties_action.triggered.connect(lambda: self._on_show_properties(track))
 
         menu.exec(table.viewport().mapToGlobal(pos))
 
     def _on_edit_metadata(self, track) -> None:
         from ui.widgets.metadata_editor_dialog import MetadataEditorDialog
         dialog = MetadataEditorDialog(track, self.store, self)
+        dialog.exec()
+
+    def _on_show_properties(self, track) -> None:
+        from ui.widgets.properties_dialog import PropertiesDialog
+        dialog = PropertiesDialog(track, self.store, self)
         dialog.exec()
 
     def _on_remove_song(self, track) -> None:

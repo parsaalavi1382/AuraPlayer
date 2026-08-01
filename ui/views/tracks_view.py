@@ -308,12 +308,23 @@ class TracksView(QWidget):
                 add_playlist_menu.addAction(action)
                 
         menu.addMenu(add_playlist_menu)
+        
+        menu.addSeparator()
+        
+        properties_action = QAction("Properties", self)
+        menu.addAction(properties_action)
+        properties_action.triggered.connect(lambda: self._on_show_properties(track))
 
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _on_edit_metadata(self, track) -> None:
         from ui.widgets.metadata_editor_dialog import MetadataEditorDialog
         dialog = MetadataEditorDialog(track, self.store, self)
+        dialog.exec()
+
+    def _on_show_properties(self, track) -> None:
+        from ui.widgets.properties_dialog import PropertiesDialog
+        dialog = PropertiesDialog(track, self.store, self)
         dialog.exec()
 
     def _on_remove_song(self, track) -> None:

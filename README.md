@@ -26,7 +26,7 @@ If you are on macOS or Linux, please feel free to download the release, run it, 
 
 ## 🌟 Project Status: Official Release (v1.0.0)
 
-AuraPlayer v1.0.0 is officially released! Core features including gapless audio playback, Lottie vector animations, player screen background blur, live search overlay, library folder synchronization, song tag editing, LRC lyric sync, custom playlists, and dynamic theme transitions are fully functional.
+AuraPlayer v1.0.0 is officially released! Core features including gapless audio playback, Lottie vector animations, player screen background blur, live search overlay, library folder synchronization, song tag editing, advanced track properties, LRC lyric sync, custom playlists, and dynamic theme transitions are fully functional.
 
 🐛 **Found an issue?** If you run into any bugs or have suggestions, please open a ticket in the **Issues** section.
 
@@ -80,6 +80,7 @@ AuraPlayer v1.0.0 is officially released! Core features including gapless audio 
 * **Missing File Safeguards:** If you delete or move a file outside the app, its row turns red in the Tracks list. Clicking it shows a helpful warning rather than crashing.
 
 ### 5. Personalization, Metadata Editing & Settings
+* **Track Properties Dialog:** Right-click any track and select "Properties" to view read-only file metadata alongside live technical audio stats pulled directly from the file using `mutagen` (Format, Bitrate, Sample Rate, Channels, and File Size).
 * **Instant Song Tag Editor:** Right-click any track in the list and select "Edit Metadata" to open the advanced tag editor. Update song titles, albums, release years, and custom album cover images directly.
 * **Tag Chip Input Field:** Supports multi-valued tags like multiple artists, album artists, and genres with stylish, interactive chip blocks. Typing a comma (`,`) or pressing Enter instantly splits and converts your text into a new chip. Each chip features an "✕" button to easily delete tags.
 * **Unsaved Changes Safeguard:** To prevent losing your hard work, closing the editor with unsaved changes prompts a gentle warning, allowing you to go back and save.

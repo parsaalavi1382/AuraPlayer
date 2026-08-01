@@ -1174,14 +1174,25 @@ class QueuePanel(QFrame):
 
 
         remove_action = QAction("Remove", self)
-
         remove_action.triggered.connect(lambda: self.engine.remove_from_queue(path))
-
         menu.addAction(remove_action)
+        
+        menu.addSeparator()
+
+        properties_action = QAction("Properties", self)
+        properties_action.triggered.connect(lambda: self._show_properties(path))
+        menu.addAction(properties_action)
 
 
 
         menu.exec(self.list_widget.mapToGlobal(pos))
+
+    def _show_properties(self, path: str):
+        track = self.engine.store.get_track(path)
+        if track:
+            from ui.widgets.properties_dialog import PropertiesDialog
+            dialog = PropertiesDialog(track, self.engine.store, self)
+            dialog.exec()
 
 
 
