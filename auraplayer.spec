@@ -29,6 +29,7 @@ a = Analysis(
         'mutagen.oggopus',
         'mutagen.wave',
         'PyQt6.QtSvg',
+        'rlottie_python',
     ],
     hookspath=[],
     hooksconfig={},
