@@ -407,7 +407,6 @@ class PlaybackEngine(QObject):
         self._burst_cutoff_timer.stop()
         self._handoff_timer.stop()
         self._old_player_cleanup_timer.stop()
-        self._standby.stop()
         self._standby_output.setVolume(0.0)
         self._is_seeking = False
         self._was_playing_before_seek = False
@@ -695,6 +694,7 @@ class PlaybackEngine(QObject):
     # Internal playback mechanics
     # ============================================================
     def _set_active_source(self, track_path: Optional[str]) -> None:
+        self._active.pause()
         if not track_path:
             self._active.setSource(QUrl())
             return
@@ -812,7 +812,7 @@ class PlaybackEngine(QObject):
 
     def _cleanup_old_player(self) -> None:
         self._standby_output.setVolume(0.0)
-        self._standby.stop()
+        self._standby.pause()
         self._preload_standby()
 
     def _connect_active_signals(self) -> None:
@@ -863,7 +863,6 @@ class PlaybackEngine(QObject):
             next_index = self._compute_next_index(self._queue_index)
             if next_index is None:
                 self._update_macro_state("stop_end")
-                self._active.stop()
                 self._save_timer.stop()
             else:
                 self._play_queue_index(next_index)

@@ -73,47 +73,62 @@ class SMTCIntegration(QObject):
     def update_metadata(self, title: str, artist: str, album: str = "", track_path: str = ""):
         if not self._updater:
             return
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(250, lambda: self._do_update_metadata(title, artist, album, track_path))
+
+    def _do_update_metadata(self, title: str, artist: str, album: str, track_path: str):
         try:
             props = self._updater.music_properties
             props.title = title
             props.artist = artist
             props.album_artist = artist
             props.album_title = album
+            self._updater.update()
             
             if track_path:
-                from core.metadata_reader import _extract_raw_art_bytes
-                from utils.paths import get_writable_data_path
-                import os
-                import asyncio
-                
-                raw_bytes = _extract_raw_art_bytes(track_path)
-                if raw_bytes:
-                    smtc_cover_path = get_writable_data_path("smtc_cover.jpg")
-                    with open(smtc_cover_path, "wb") as f:
-                        f.write(raw_bytes)
-                        
-                    from winrt.windows.storage import StorageFile
-                    from winrt.windows.storage.streams import RandomAccessStreamReference
-                    
-                    abs_path = os.path.abspath(smtc_cover_path)
-                    
-                    async def _get_thumb():
-                        try:
-                            file = await StorageFile.get_file_from_path_async(abs_path)
-                            return RandomAccessStreamReference.create_from_file(file)
-                        except Exception as e:
-                            logging.warning(f"StorageFile failed: {e}")
-                            return None
-                            
-                    self._updater.thumbnail = asyncio.run(_get_thumb())
-                else:
-                    self._updater.thumbnail = None
+                import threading
+                threading.Thread(target=self._update_thumbnail_bg, args=(track_path,), daemon=True).start()
             else:
                 self._updater.thumbnail = None
-                
-            self._updater.update()
+                self._updater.update()
         except Exception as e:
             logging.warning(f"SMTC metadata update failed: {e}")
+
+    def _update_thumbnail_bg(self, track_path: str):
+        try:
+            from core.metadata_reader import _extract_raw_art_bytes
+            from utils.paths import get_writable_data_path
+            import os
+            import asyncio
+            
+            raw_bytes = _extract_raw_art_bytes(track_path)
+            if raw_bytes:
+                smtc_cover_path = get_writable_data_path("smtc_cover.jpg")
+                with open(smtc_cover_path, "wb") as f:
+                    f.write(raw_bytes)
+                    
+                from winrt.windows.storage import StorageFile
+                from winrt.windows.storage.streams import RandomAccessStreamReference
+                
+                abs_path = os.path.abspath(smtc_cover_path)
+                
+                async def _get_thumb():
+                    try:
+                        file = await StorageFile.get_file_from_path_async(abs_path)
+                        return RandomAccessStreamReference.create_from_file(file)
+                    except Exception as e:
+                        logging.warning(f"StorageFile failed: {e}")
+                        return None
+                        
+                thumb = asyncio.run(_get_thumb())
+                if thumb:
+                    self._updater.thumbnail = thumb
+                    self._updater.update()
+            else:
+                self._updater.thumbnail = None
+                self._updater.update()
+        except Exception as e:
+            logging.warning(f"SMTC background thumbnail update failed: {e}")
             
     def update_playback_status(self, is_playing: bool, is_stopped: bool = False):
         if not self._smtc:
