@@ -131,6 +131,17 @@ class PlaybackEngine(QObject):
         # Restore the last session's track + position
         self._restore_initial_state(state)
 
+        # Init System Media Transport Controls
+        from core.smtc import SMTCIntegration
+        self.smtc = SMTCIntegration(self)
+        self.track_changed.connect(self._update_smtc_metadata_for_track)
+
+    def _update_smtc_metadata_for_track(self, path: str) -> None:
+        track = self.store.get_track(path)
+        if track and hasattr(self, "smtc"):
+            artist_str = ", ".join(track.artists) if hasattr(track, "artists") else "Unknown Artist"
+            self.smtc.update_metadata(track.title, artist_str, track.album)
+
     # ============================================================
     # State Machine Authority (Single Source of Truth)
     # ============================================================
@@ -141,16 +152,20 @@ class PlaybackEngine(QObject):
         if new_state == "scrubbing":
             if self._was_playing_before_seek:
                 self.playback_state_changed.emit("playing")
+                self.smtc.update_playback_status(is_playing=True)
             else:
                 self.playback_state_changed.emit("paused")
+                self.smtc.update_playback_status(is_playing=False)
         elif new_state == "playing":
             self.playback_state_changed.emit("playing")
+            self.smtc.update_playback_status(is_playing=True)
             current_path = self.get_current_track_path()
             if current_path and current_path != self._last_incremented_path:
                 self._last_incremented_path = current_path
                 self._increment_track_play_stats(current_path)
         elif new_state in ("paused", "stop_initial", "stop_end"):
             self.playback_state_changed.emit("paused")
+            self.smtc.update_playback_status(is_playing=False, is_stopped=(new_state != "paused"))
 
     def _increment_track_play_stats(self, path: str) -> None:
         track = self.store.get_track(path)
