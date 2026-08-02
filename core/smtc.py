@@ -81,22 +81,31 @@ class SMTCIntegration(QObject):
             props.album_title = album
             
             if track_path:
-                from core.metadata_reader import _extract_raw_album_art_bytes
+                from core.metadata_reader import _extract_raw_art_bytes
                 from utils.paths import get_writable_data_path
                 import os
+                import asyncio
                 
-                raw_bytes = _extract_raw_album_art_bytes(track_path)
+                raw_bytes = _extract_raw_art_bytes(track_path)
                 if raw_bytes:
                     smtc_cover_path = get_writable_data_path("smtc_cover.jpg")
                     with open(smtc_cover_path, "wb") as f:
                         f.write(raw_bytes)
                         
-                    from winrt.windows.foundation import Uri
+                    from winrt.windows.storage import StorageFile
                     from winrt.windows.storage.streams import RandomAccessStreamReference
                     
-                    abs_path = os.path.abspath(smtc_cover_path).replace('\\', '/')
-                    uri = Uri(f"file:///{abs_path}")
-                    self._updater.thumbnail = RandomAccessStreamReference.create_from_uri(uri)
+                    abs_path = os.path.abspath(smtc_cover_path)
+                    
+                    async def _get_thumb():
+                        try:
+                            file = await StorageFile.get_file_from_path_async(abs_path)
+                            return RandomAccessStreamReference.create_from_file(file)
+                        except Exception as e:
+                            logging.warning(f"StorageFile failed: {e}")
+                            return None
+                            
+                    self._updater.thumbnail = asyncio.run(_get_thumb())
                 else:
                     self._updater.thumbnail = None
             else:
