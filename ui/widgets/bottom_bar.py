@@ -130,6 +130,8 @@ class BottomBar(QFrame):
         self.title_label.setObjectName("bottomBarTitle")
         self.title_label.clicked.connect(self.title_clicked.emit)
         self.title_label.set_track_path_callback(lambda: self._current_track.path if self._current_track else None)
+        self.title_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.title_label.customContextMenuRequested.connect(self._show_title_context_menu)
         text_layout.addWidget(self.title_label)
 
         self.artist_container = QWidget(self)
@@ -501,9 +503,26 @@ class BottomBar(QFrame):
         q_color = accent if self._queue_active else secondary
         self._queue_btn.setIcon(svg_icon("queue", q_color, _ICON_SIZE))
 
+    def _show_title_context_menu(self, pos) -> None:
+        if not self._current_track:
+            return
+        store = getattr(self, "store", None)
+        engine = getattr(self, "engine", None)
+        if not store:
+            return
+        from ui.context_menu import build_track_context_menu
+        menu = build_track_context_menu(
+            parent=self,
+            track=self._current_track,
+            store=store,
+            engine=engine,
+        )
+        menu.exec(self.title_label.mapToGlobal(pos))
+
     def mousePressEvent(self, event) -> None:
         super().mousePressEvent(event)
-        self.bar_clicked.emit()
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.bar_clicked.emit()
 
     def _clear_artist_layout(self) -> None:
         while self.artist_layout.count() > 0:

@@ -352,6 +352,8 @@ class PlayerScreen(QFrame):
         self._title_label.setObjectName("playerTitle")
         self._title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         self._title_label.clicked.connect(self.title_clicked.emit)
+        self._title_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._title_label.customContextMenuRequested.connect(self._show_title_context_menu)
         info_area.addWidget(self._title_label)
 
         self.artist_container = QWidget(self)
@@ -782,6 +784,21 @@ class PlayerScreen(QFrame):
 
         # Load lyrics on track change
         self._lyrics_panel.load_track_lyrics(path or "")
+
+    def _show_title_context_menu(self, pos) -> None:
+        if not self._current_path or not self.store:
+            return
+        track = self.store.get_track(self._current_path)
+        if not track:
+            return
+        from ui.context_menu import build_track_context_menu
+        menu = build_track_context_menu(
+            parent=self,
+            track=track,
+            store=self.store,
+            engine=self.engine,
+        )
+        menu.exec(self._title_label.mapToGlobal(pos))
 
     def _update_blurred_background(self, art: QPixmap) -> None:
         self._blur_request_id += 1

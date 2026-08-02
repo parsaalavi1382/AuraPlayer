@@ -253,83 +253,15 @@ class TracksView(QWidget):
         if not track:
             return
 
-        menu = QMenu(self)
-
-        from ui.theme import THEMES, DEFAULT_THEME
-        theme_key = self.store.cache.settings.theme
-        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
-        bg = theme.get("surface", "#1E222B")
-        text = theme.get("text_primary", "#FFFFFF")
-        border = theme.get("border", "#2E323C")
-        accent = theme.get("accent", "#6C5CE7")
-
-        qss = f"""
-            QMenu {{
-                background-color: {bg};
-                color: {text};
-                border: 1px solid {border};
-                border-radius: 8px;
-                padding: 4px;
-            }}
-            QMenu::item {{
-                padding: 6px 12px;
-                border-radius: 4px;
-                color: {text};
-            }}
-            QMenu::item:selected {{
-                background-color: {accent};
-                color: {text};
-            }}
-        """
-        menu.setStyleSheet(qss)
-        
-        # Play / Queue controls
-        if self.engine:
-            add_queue_action = QAction("Add to Queue", self)
-            menu.addAction(add_queue_action)
-            add_queue_action.triggered.connect(lambda: self.engine.add_to_queue(track.path))
-            
-            play_next_action = QAction("Play Next", self)
-            menu.addAction(play_next_action)
-            play_next_action.triggered.connect(lambda: self.engine.play_next(track.path))
-            
-            menu.addSeparator()
-
-        edit_action = QAction("Edit Metadata", self)
-        remove_action = QAction("Remove Song", self)
-        menu.addAction(edit_action)
-        menu.addAction(remove_action)
-
-        edit_action.triggered.connect(lambda: self._on_edit_metadata(track))
-        remove_action.triggered.connect(lambda: self._on_remove_song(track))
-
-        menu.addSeparator()
-
-        # Add to Playlist Submenu
-        add_playlist_menu = QMenu("Add to Playlist", self)
-        add_playlist_menu.setStyleSheet(qss)
-        custom_playlists = [p for p in self.store.all_playlists() if not p.id.startswith("smart_")]
-        
-        # Include Favorites
-        fav_action = QAction("Favorites", self)
-        fav_action.triggered.connect(lambda: self.store.add_tracks_to_playlist("smart_favorites", [track.path]))
-        add_playlist_menu.addAction(fav_action)
-        
-        if custom_playlists:
-            add_playlist_menu.addSeparator()
-            for pl in custom_playlists:
-                action = QAction(pl.name, self)
-                action.triggered.connect(lambda checked, p_id=pl.id: self.store.add_tracks_to_playlist(p_id, [track.path]))
-                add_playlist_menu.addAction(action)
-                
-        menu.addMenu(add_playlist_menu)
-        
-        menu.addSeparator()
-        
-        properties_action = QAction("Properties", self)
-        menu.addAction(properties_action)
-        properties_action.triggered.connect(lambda: self._on_show_properties(track))
-
+        from ui.context_menu import build_track_context_menu
+        menu = build_track_context_menu(
+            parent=self,
+            track=track,
+            store=self.store,
+            engine=self.engine,
+            on_remove=lambda: self._on_remove_song(track),
+            remove_text="Remove Song"
+        )
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _on_edit_metadata(self, track) -> None:

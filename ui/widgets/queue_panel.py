@@ -44,30 +44,74 @@ from core.metadata_reader import get_album_art
 
 
 
-class QueueListWidget(QListWidget):
+def _select_parent_queue_item(widget):
+    p = widget.parent()
+    while p is not None:
+        if isinstance(p, QueueItemWidget):
+            p.select_item_and_focus()
+            break
+        p = p.parent()
 
+
+class QueueListWidget(QListWidget):
     reordered = pyqtSignal(list)
     paths_dropped = pyqtSignal(list, int)
+    play_requested = pyqtSignal(int)
+    delete_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
-
         super().__init__(parent)
-
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
-
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
-
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-
         self.setMouseTracking(True)
-
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-
         self._drag_hover_row = -1
+        self.currentItemChanged.connect(self._on_current_item_changed)
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self._update_all_item_overlays()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self._update_all_item_overlays()
+
+    def _on_current_item_changed(self, current, previous):
+        self._update_all_item_overlays()
+
+    def _update_all_item_overlays(self):
+        has_focus = self.hasFocus()
+        curr_item = self.currentItem()
+        for i in range(self.count()):
+            item = self.item(i)
+            widget = self.itemWidget(item)
+            if hasattr(widget, "set_keyboard_selected"):
+                is_selected = (item == curr_item)
+                widget.set_keyboard_selected(is_selected and has_focus)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            curr_item = self.currentItem()
+            if curr_item:
+                row = self.row(curr_item)
+                self.play_requested.emit(row)
+                event.accept()
+                return
+        elif key == Qt.Key.Key_Delete:
+            curr_item = self.currentItem()
+            if curr_item:
+                path = curr_item.data(Qt.ItemDataRole.UserRole)
+                if path:
+                    self.delete_requested.emit(path)
+                    event.accept()
+                    return
+        super().keyPressEvent(event)
 
     def startDrag(self, supportedActions):
         selected_items = self.selectedItems()
@@ -212,166 +256,116 @@ class QueueCoverLabel(QWidget):
         self.is_playing = is_playing
 
         self.is_hovered = False
-
+        self.force_show_play = False
         self.theme_colors = theme_colors
-
         self.setFixedSize(32, 32)
-
         self.pixmap = None
 
-       
-
         # Load cover art
-
         raw_pixmap = get_album_art(track_path) if (track_path and has_embedded_art) else None
-
         if raw_pixmap and not raw_pixmap.isNull():
-
             self.pixmap = raw_pixmap.scaled(
-
                 32, 32,
-
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-
                 Qt.TransformationMode.SmoothTransformation,
-
             )
 
-
+    def set_force_show_play(self, show: bool):
+        if self.force_show_play != show:
+            self.force_show_play = show
+            self.update()
 
     def paintEvent(self, event):
-
         painter = QPainter(self)
-
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-       
-
         cover_rect = self.rect()
-
         clip_path = QPainterPath()
-
         clip_path.addRoundedRect(QRectF(cover_rect), 4.0, 4.0)
 
-       
-
         painter.save()
-
         painter.setClipPath(clip_path)
 
-       
-
         bg = self.theme_colors.get("surface", "#1C1F26")
-
         text_sec = self.theme_colors.get("text_secondary", "#9AA0AC")
 
-       
-
         if self.pixmap:
-
             painter.drawPixmap(cover_rect, self.pixmap)
-
         else:
-
             from ui.svg_icon import get_default_cover
-
             disc_px = get_default_cover(cover_rect.width(), self.theme_colors, corner_radius=4.0)
-
             if disc_px and not disc_px.isNull():
-
                 painter.drawPixmap(cover_rect, disc_px)
-
             else:
-
                 painter.fillRect(cover_rect, QColor(bg))
 
         painter.restore()
 
-       
-
-        # Overlay if playing or hovered
-
-        show_overlay = (self.is_active and self.is_playing) or self.is_hovered
-
+        # Overlay if playing, hovered, or force_show_play (keyboard / row hover)
+        show_overlay = (self.is_active and self.is_playing) or self.is_hovered or self.force_show_play
         if show_overlay:
-
             painter.save()
-
             painter.setClipPath(clip_path)
-
             painter.fillRect(cover_rect, QColor(0, 0, 0, 110))
-
             painter.restore()
 
-           
-
         if self.is_active and self.is_playing:
-
             # Draw animated equalizer (State A)
-
             max_bar_h = 12
-
             bar_w = 2
-
             spacing = 1
-
             eq_w = 3 * bar_w + 2 * spacing
-
             eq_x = (self.width() - eq_w) // 2
-
             eq_y = (self.height() - max_bar_h) // 2
 
-           
-
             t = time.time()
-
             h1 = 0.2 + 0.7 * abs(math.sin(t * 9.0))
-
             h2 = 0.3 + 0.6 * abs(math.sin(t * 13.0 + 1.5))
-
             h3 = 0.1 + 0.8 * abs(math.sin(t * 7.5 + 3.0))
-
-           
 
             heights = [h1 * max_bar_h, h2 * max_bar_h, h3 * max_bar_h]
 
-           
-
             painter.save()
-
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-
             painter.setPen(Qt.PenStyle.NoPen)
-
             painter.setBrush(QBrush(QColor("#FFFFFF")))
 
             for i, h in enumerate(heights):
-
                 x = eq_x + i * (bar_w + spacing)
-
                 y = (eq_y + max_bar_h) - h
-
                 painter.drawRect(QRectF(x, y, bar_w, h))
 
             painter.restore()
 
-        elif self.is_hovered:
-
+        elif self.is_hovered or self.force_show_play:
             # Draw Play icon (State B)
-
             painter.save()
-
             font = QFont("Segoe UI", 9, QFont.Weight.Bold)
-
             painter.setFont(font)
-
             painter.setPen(QColor("#FFFFFF"))
-
             play_rect = cover_rect.adjusted(1, 0, 0, 0)
-
             painter.drawText(play_rect, Qt.AlignmentFlag.AlignCenter, "▶")
-
             painter.restore()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self.is_hovered = True
+        self.update()
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.is_hovered = False
+        self.update()
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            _select_parent_queue_item(self)
+            self.clicked.emit()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
 
 
 
@@ -563,150 +557,112 @@ class QueueHoverLabel(QLabel):
 
 
     def mousePressEvent(self, event):
-
         if event.button() == Qt.MouseButton.LeftButton:
-
+            _select_parent_queue_item(self)
             self.clicked.emit()
-
             event.accept()
-
         else:
-
             super().mousePressEvent(event)
 
 
-
-
-
 class QueueItemWidget(QWidget):
-
     """Custom widget inside QListWidget for rich display (Cover, Title, Artist)."""
-
     album_requested = pyqtSignal(str)
-
     artist_requested = pyqtSignal(str)
-
     cover_clicked = pyqtSignal()
 
-
-
-    def __init__(self, track_path: str, title: str, artist: str, album_key: str, first_artist: str, is_active: bool, is_playing: bool, theme_colors: dict, has_embedded_art: bool = True, parent=None):
-
+    def __init__(self, item, list_widget, track_path: str, title: str, artist: str, album_key: str, first_artist: str, is_active: bool, is_playing: bool, theme_colors: dict, has_embedded_art: bool = True, parent=None):
         super().__init__(parent)
+        self.item = item
+        self.list_widget = list_widget
+        self.is_row_hovered = False
+        self.is_keyboard_selected = False
 
         self.setMouseTracking(True)
-
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
-
-
         self.track_path = track_path
-
         self.album_key = album_key
-
         self.first_artist = first_artist
 
-
-
         layout = QHBoxLayout(self)
-
         layout.setContentsMargins(8, 4, 8, 4)
-
         layout.setSpacing(10)
 
-
-
         # Album cover on the left with three states
-
         self.cover_lbl = QueueCoverLabel(track_path, is_active, is_playing, theme_colors, has_embedded_art, self)
-
         self.cover_lbl.clicked.connect(self.cover_clicked.emit)
-
         layout.addWidget(self.cover_lbl)
 
-
-
         # Text column (Title + Artist)
-
         text_layout = QVBoxLayout()
-
         text_layout.setSpacing(2)
-
         text_layout.setContentsMargins(0, 0, 0, 0)
 
-
-
         self.title_lbl = QueueHoverLabel(title, is_active, theme_colors, is_bold=True, font_size=10, parent=self)
-
         self.title_lbl.clicked.connect(lambda: self.album_requested.emit(self.album_key))
-
         text_layout.addWidget(self.title_lbl)
 
-
-
         # Separate artists dynamically for individual hover and underline effects
-
         self.artist_container = QWidget(self)
-
         self.artist_container.setObjectName("queueArtistContainer")
-
         self.artist_container.setMouseTracking(True)
-
         self.artist_container.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
-
-
         artists_layout = QHBoxLayout(self.artist_container)
-
         artists_layout.setContentsMargins(0, 0, 0, 0)
-
         artists_layout.setSpacing(0)
 
-
-
         if artist and artist != "Unknown Artist":
-
             artist_parts = [a.strip() for a in artist.split(",") if a.strip()]
-
         else:
-
             artist_parts = ["Unknown Artist"]
 
-
-
         for idx, art_name in enumerate(artist_parts):
-
             art_lbl = QueueHoverLabel(art_name, is_active, theme_colors, is_bold=False, font_size=9, parent=self.artist_container)
-
             art_lbl.clicked.connect(lambda name=art_name: self.artist_requested.emit(name))
-
             artists_layout.addWidget(art_lbl)
 
-
-
             if idx < len(artist_parts) - 1:
-
                 sep_lbl = QLabel(", ", self.artist_container)
-
                 sep_lbl.setFont(QFont("Segoe UI", 9))
-
                 text_secondary = theme_colors.get("text_secondary", "#9AA0AC")
-
                 sep_lbl.setStyleSheet(f"color: {text_secondary};")
-
                 sep_lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-
                 artists_layout.addWidget(sep_lbl)
 
-
-
         artists_layout.addStretch()
-
         text_layout.addWidget(self.artist_container)
 
-
-
         layout.addLayout(text_layout, stretch=1)
+
+    def select_item_and_focus(self):
+        if self.item and self.list_widget:
+            self.list_widget.setCurrentItem(self.item)
+            self.list_widget.setFocus()
+
+    def set_keyboard_selected(self, selected: bool):
+        self.is_keyboard_selected = selected
+        self._update_cover_overlay()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self.is_row_hovered = True
+        self._update_cover_overlay()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.is_row_hovered = False
+        self._update_cover_overlay()
+
+    def _update_cover_overlay(self):
+        show_play = self.is_row_hovered or self.is_keyboard_selected
+        self.cover_lbl.set_force_show_play(show_play)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.select_item_and_focus()
+        super().mousePressEvent(event)
 
 
 
@@ -842,6 +798,8 @@ class QueuePanel(QFrame):
 
         self.list_widget.reordered.connect(self._on_queue_reordered)
         self.list_widget.paths_dropped.connect(self._on_queue_paths_dropped)
+        self.list_widget.play_requested.connect(self._on_play_requested)
+        self.list_widget.delete_requested.connect(self._on_delete_requested)
 
         self.list_widget.doubleClicked.connect(self._on_item_double_clicked)
 
@@ -860,6 +818,12 @@ class QueuePanel(QFrame):
         self.engine.playback_state_changed.connect(self.refresh)
 
         self.engine.shuffle_changed.connect(self.refresh)
+
+    def _on_play_requested(self, row: int) -> None:
+        self.engine._play_queue_index(row)
+
+    def _on_delete_requested(self, path: str) -> None:
+        self.engine.remove_from_queue(path)
 
 
 
@@ -925,13 +889,19 @@ class QueuePanel(QFrame):
 
             QListWidget::item:hover {{
 
-                background-color: transparent;
+                background-color: {theme_colors.get("surface_hover", "#232731")};
 
             }}
 
-            QListWidget::item:selected {{
+            QListWidget::item:selected:active {{
 
                 background-color: {theme_colors.get("surface_selected", "#2A2440")};
+
+            }}
+
+            QListWidget::item:selected:!active {{
+
+                background-color: transparent;
 
             }}
 
@@ -942,86 +912,57 @@ class QueuePanel(QFrame):
 
 
     def refresh(self) -> None:
-
+        current_row = self.list_widget.currentRow()
+        
         self.list_widget.blockSignals(True)
-
         self.list_widget.clear()
 
-
-
         queue = self.engine.get_queue()
-
         active_idx = self.engine.get_queue_index()
 
-
-
         for i, path in enumerate(queue):
-
             track = self.store.get_track(path)
-
             has_embedded_art = True
-
             if track:
-
                 title = track.title
-
                 artists_str = ", ".join(track.artists)
-
                 album_key = track.album_key
-
                 first_artist = track.artists[0] if track.artists else "Unknown Artist"
-
                 has_embedded_art = track.has_embedded_art
-
             else:
-
                 title = os.path.basename(path)
-
                 artists_str = "Unknown Artist"
-
                 album_key = ""
-
                 first_artist = "Unknown Artist"
-
                 has_embedded_art = False
 
-
-
             item = QListWidgetItem()
-
             item.setData(Qt.ItemDataRole.UserRole, path)
-
             self.list_widget.addItem(item)
 
-
-
             is_active = (i == active_idx)
-
             is_playing = is_active and self.engine.is_playing()
-
-            widget = QueueItemWidget(path, title, artists_str, album_key, first_artist, is_active, is_playing, self._theme_colors, has_embedded_art, self.list_widget)
-
+            widget = QueueItemWidget(item, self.list_widget, path, title, artists_str, album_key, first_artist, is_active, is_playing, self._theme_colors, has_embedded_art, self.list_widget)
             widget.album_requested.connect(self.album_requested.emit)
-
             widget.artist_requested.connect(self.artist_requested.emit)
-
             widget.cover_clicked.connect(lambda r=i: self._on_cover_clicked(r))
-
             item.setSizeHint(widget.sizeHint())
-
             self.list_widget.setItemWidget(item, widget)
 
-
-
-            if is_active:
-
-                self.list_widget.setCurrentItem(item)
-
-
+            # Restore the user's previous selection if they are actively navigating (focused),
+            # otherwise default to the active track so it stays in sync.
+            has_focus = self.list_widget.hasFocus()
+            if has_focus and current_row != -1:
+                if i == current_row:
+                    self.list_widget.setCurrentItem(item)
+            else:
+                if is_active:
+                    self.list_widget.setCurrentItem(item)
 
         self.list_widget.blockSignals(False)
-
         self._update_animation_timer()
+        # Force overlay update on the restored selection
+        self.list_widget._update_all_item_overlays()
 
 
 
@@ -1117,74 +1058,20 @@ class QueuePanel(QFrame):
 
 
 
-        menu = QMenu(self)
+        track = self.engine.store.get_track(path)
+        if not track:
+            return
 
-        if self._theme_colors:
-
-            bg = self._theme_colors.get("surface", "#1C1F26")
-
-            text = self._theme_colors.get("text_primary", "#EDEFF2")
-
-            border = self._theme_colors.get("border", "#2E323C")
-
-            accent = self._theme_colors.get("accent", "#6C5CE7")
-
-            menu.setStyleSheet(f"""
-
-                QMenu {{
-
-                    background-color: {bg};
-
-                    color: {text};
-
-                    border: 1px solid {border};
-
-                    border-radius: 8px;
-
-                    padding: 4px;
-
-                }}
-
-                QMenu::item {{
-
-                    padding: 6px 12px;
-
-                    border-radius: 4px;
-
-                }}
-
-                QMenu::item:selected {{
-
-                    background-color: {accent};
-
-                    color: {text};
-
-                }}
-
-            """)
-
-
-
-        play_action = QAction("Play Now", self)
-
-        play_action.triggered.connect(lambda: self.engine._play_queue_index(row))
-
-        menu.addAction(play_action)
-
-
-
-        remove_action = QAction("Remove", self)
-        remove_action.triggered.connect(lambda: self.engine.remove_from_queue(path))
-        menu.addAction(remove_action)
-        
-        menu.addSeparator()
-
-        properties_action = QAction("Properties", self)
-        properties_action.triggered.connect(lambda: self._show_properties(path))
-        menu.addAction(properties_action)
-
-
-
+        from ui.context_menu import build_track_context_menu
+        menu = build_track_context_menu(
+            parent=self,
+            track=track,
+            store=self.engine.store,
+            engine=self.engine,
+            on_play=lambda: self.engine._play_queue_index(row),
+            on_remove=lambda: self.engine.remove_from_queue(path),
+            remove_text="Remove from Queue"
+        )
         menu.exec(self.list_widget.mapToGlobal(pos))
 
     def _show_properties(self, path: str):

@@ -522,53 +522,16 @@ class ArtistPageView(QWidget):
         if not track:
             return
 
-        from PyQt6.QtWidgets import QMenu, QMessageBox
-        from PyQt6.QtGui import QAction
-        from ui.theme import THEMES, DEFAULT_THEME
-
-        menu = QMenu(self)
-        theme_key = self.store.cache.settings.theme
-        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
-        bg = theme.get("surface", "#1E222B")
-        text = theme.get("text_primary", "#FFFFFF")
-        border = theme.get("border", "#2E323C")
-        accent = theme.get("accent", "#6C5CE7")
-
-        qss = f"""
-            QMenu {{
-                background-color: {bg};
-                color: {text};
-                border: 1px solid {border};
-                border-radius: 8px;
-                padding: 4px;
-            }}
-            QMenu::item {{
-                padding: 6px 12px;
-                border-radius: 4px;
-                color: {text};
-            }}
-            QMenu::item:selected {{
-                background-color: {accent};
-                color: {text};
-            }}
-        """
-        menu.setStyleSheet(qss)
-        edit_action = QAction("Edit Metadata", self)
-        remove_action = QAction("Remove Song", self)
-        add_playlist_action = QAction("Add to Playlist", self)
-        menu.addAction(edit_action)
-        menu.addAction(remove_action)
-        menu.addAction(add_playlist_action)
-        
-        menu.addSeparator()
-        properties_action = QAction("Properties", self)
-        menu.addAction(properties_action)
-
-        edit_action.triggered.connect(lambda: self._on_edit_metadata(track))
-        remove_action.triggered.connect(lambda: self._on_remove_song(track))
-        add_playlist_action.triggered.connect(lambda: self._on_add_to_playlist(track))
-        properties_action.triggered.connect(lambda: self._on_show_properties(track))
-
+        from ui.context_menu import build_track_context_menu
+        menu = build_track_context_menu(
+            parent=self,
+            track=track,
+            store=self.store,
+            engine=self.engine,
+            on_play=lambda: self.track_double_clicked.emit(track.path),
+            on_remove=lambda: self._on_remove_song(track),
+            remove_text="Remove Song"
+        )
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _on_edit_metadata(self, track) -> None:

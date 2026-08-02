@@ -561,47 +561,57 @@ class PlaybackEngine(QObject):
         if self._queue and self._queue_index >= 0:
             self._play_queue_index(self._queue_index)
     
-    def play_next(self, track_path: str) -> None:
+    def play_next(self, track_paths: str | list[str]) -> None:
+        if isinstance(track_paths, str):
+            track_paths = [track_paths]
+            
         current_path = self.get_current_track_path()
-        self._remove_from_original_queue_silently(track_path)
-        self._remove_from_queue_silently(track_path)
+        for track_path in reversed(track_paths):
+            self._remove_from_original_queue_silently(track_path)
+            self._remove_from_queue_silently(track_path)
 
-        # Insert into original queue after current track
-        if current_path is not None and current_path in self._original_queue:
-            insert_at_orig = self._original_queue.index(current_path) + 1
-        else:
-            insert_at_orig = max(0, self._queue_index + 1)
-        self._original_queue.insert(insert_at_orig, track_path)
+            # Insert into original queue after current track
+            if current_path is not None and current_path in self._original_queue:
+                insert_at_orig = self._original_queue.index(current_path) + 1
+            else:
+                insert_at_orig = max(0, self._queue_index + 1)
+            self._original_queue.insert(insert_at_orig, track_path)
 
-        # Insert into active queue after current track index
-        if 0 <= self._queue_index < len(self._queue):
-            insert_at_act = self._queue_index + 1
-        else:
-            insert_at_act = 0
-        self._queue.insert(insert_at_act, track_path)
+            # Insert into active queue after current track index
+            if 0 <= self._queue_index < len(self._queue):
+                insert_at_act = self._queue_index + 1
+            else:
+                insert_at_act = 0
+            self._queue.insert(insert_at_act, track_path)
 
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
+        self._preload_standby()
 
-        if current_path is None and len(self._queue) == 1:
+        if current_path is None and len(self._queue) == len(track_paths):
             self._play_queue_index(0)
 
-    def add_to_queue(self, track_path: str) -> None:
+    def add_to_queue(self, track_paths: str | list[str]) -> None:
+        if isinstance(track_paths, str):
+            track_paths = [track_paths]
+            
         current_path = self.get_current_track_path()
         was_empty_or_stopped = current_path is None or self._active.source().isEmpty()
 
-        self._remove_from_original_queue_silently(track_path)
-        self._remove_from_queue_silently(track_path)
-        self._original_queue.append(track_path)
-        self._queue.append(track_path)
+        for track_path in track_paths:
+            self._remove_from_original_queue_silently(track_path)
+            self._remove_from_queue_silently(track_path)
+            self._original_queue.append(track_path)
+            self._queue.append(track_path)
         
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
+        self._preload_standby()
 
-        if was_empty_or_stopped:
-            new_index = self._queue.index(track_path)
+        if was_empty_or_stopped and track_paths:
+            new_index = self._queue.index(track_paths[0])
             self._play_queue_index(new_index)
 
     def remove_from_queue(self, track_path: str) -> None:
@@ -610,6 +620,7 @@ class PlaybackEngine(QObject):
         self._remove_from_queue_silently(track_path)
         self._persist_queue()
         self.queue_changed.emit()
+        self._preload_standby()
 
         if was_current:
             if self._queue:
@@ -628,15 +639,6 @@ class PlaybackEngine(QObject):
         if track_path in self._queue:
             self._queue.remove(track_path)
 
-        if was_current:
-            if self._queue:
-                next_index = min(self._queue_index, len(self._queue) - 1)
-                self._play_queue_index(next_index)
-            else:
-                self.stop()
-                self._queue_index = -1
-                self._set_active_source(None)
-
     def reorder_queue(self, new_order: list[str]) -> None:
         if sorted(new_order) != sorted(self._queue):
             raise ValueError("reorder_queue() received a different set of tracks.")
@@ -646,6 +648,7 @@ class PlaybackEngine(QObject):
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
+        self._preload_standby()
 
     def insert_into_queue(self, track_paths: list[str], at_index: int) -> None:
         current_path = self.get_current_track_path()
@@ -665,6 +668,7 @@ class PlaybackEngine(QObject):
         self._resync_queue_index_to_current_track(fallback_path=current_path)
         self._persist_queue()
         self.queue_changed.emit()
+        self._preload_standby()
 
         if was_empty_or_stopped and track_paths:
             new_index = self._queue.index(track_paths[0])

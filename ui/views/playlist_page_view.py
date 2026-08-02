@@ -1296,86 +1296,29 @@ class PlaylistPageView(QWidget):
 
         # Style menu and its submenus with playlist theme colors
         theme_key = self.store.cache.settings.theme
-        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
-        bg = theme.get("surface", "#1E222B")
-        text = theme.get("text_primary", "#FFFFFF")
-        border = theme.get("border", "#2E323C")
-        accent = theme.get("accent", "#6C5CE7")
+        from ui.context_menu import build_track_context_menu
 
-        qss = f"""
-            QMenu {{
-                background-color: {bg};
-                color: {text};
-                border: 1px solid {border};
-                border-radius: 8px;
-                padding: 4px;
-            }}
-            QMenu::item {{
-                padding: 6px 12px;
-                border-radius: 4px;
-                color: {text};
-            }}
-            QMenu::item:selected {{
-                background-color: {accent};
-                color: {text};
-            }}
-        """
-        menu.setStyleSheet(qss)
-
-        # Play / Play Next / Queue
-        play_act = QAction("Play", self)
-        play_next_act = QAction("Play Next", self)
-        enqueue_act = QAction("Add to Queue", self)
-        
-        play_act.triggered.connect(lambda: self.track_double_clicked.emit(track.path))
-        if self.engine:
-            play_next_act.triggered.connect(lambda: self.engine.play_next(track.path))
-            enqueue_act.triggered.connect(lambda: self.engine.enqueue(track.path))
-        
-        menu.addAction(play_act)
-        menu.addAction(play_next_act)
-        menu.addAction(enqueue_act)
-        menu.addSeparator()
-
-        # Favorites toggling
-        is_fav = self.store.is_favorite(track.path)
-        fav_text = "Remove from Favorites" if is_fav else "Add to Favorites"
-        fav_act = QAction(fav_text, self)
-        fav_act.triggered.connect(lambda: self.store.toggle_favorite(track.path))
-        menu.addAction(fav_act)
-
-        # Add to Custom Playlist sub-menu
-        add_to_pl_menu = QMenu("Add to Playlist", self)
-        add_to_pl_menu.setStyleSheet(qss)
-        custom_playlists = [p for p in self.store.all_playlists() if not p.id.startswith("smart_")]
-        if custom_playlists:
-            for pl in custom_playlists:
-                act = QAction(pl.name, self)
-                # Capture playlist id in lambda
-                act.triggered.connect(lambda checked, pl_id=pl.id: self.store.add_tracks_to_playlist(pl_id, [track.path]))
-                add_to_pl_menu.addAction(act)
-        else:
-            no_pl_act = QAction("No custom playlists", self)
-            no_pl_act.setEnabled(False)
-            add_to_pl_menu.addAction(no_pl_act)
-        menu.addMenu(add_to_pl_menu)
-
-        # Remove from this playlist (only if custom playlist or smart_favorites)
         can_remove = (not self.is_smart) or (self.playlist_id == "smart_favorites")
         if can_remove:
-            remove_act = QAction("Remove from this Playlist", self)
+            remove_text = "Remove from this Playlist"
             if self.playlist_id == "smart_favorites":
-                remove_act.triggered.connect(lambda: self.store.toggle_favorite(track.path))
+                on_remove = lambda: self.store.toggle_favorite(track.path)
             else:
-                # Custom playlist: remove by index
-                remove_act.triggered.connect(lambda: self._remove_track_by_index(index.row()))
-            menu.addAction(remove_act)
+                on_remove = lambda: self._remove_track_by_index(index.row())
+        else:
+            # If not removable from playlist, provide the library remove action
+            remove_text = "Remove from Library"
+            on_remove = lambda: self._on_remove_song(track) if hasattr(self, '_on_remove_song') else None
 
-        menu.addSeparator()
-        properties_act = QAction("Properties", self)
-        properties_act.triggered.connect(lambda: self._on_show_properties(track))
-        menu.addAction(properties_act)
-
+        menu = build_track_context_menu(
+            parent=self,
+            track=track,
+            store=self.store,
+            engine=self.engine,
+            on_play=lambda: self.track_double_clicked.emit(track.path),
+            on_remove=on_remove,
+            remove_text=remove_text
+        )
         menu.exec(self.table.mapToGlobal(pos))
 
     def _on_show_properties(self, track) -> None:

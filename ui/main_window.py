@@ -177,6 +177,8 @@ class MainWindow(QMainWindow):
 
         # --- Bottom Persistent Transport Bar ---
         self.bottom_bar = BottomBar()
+        self.bottom_bar.store = self.store
+        self.bottom_bar.engine = self.engine
         layout.addWidget(self.bottom_bar)
 
         self.bottom_bar.queue_clicked.connect(self._toggle_main_queue)
@@ -643,7 +645,7 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, watched, event) -> bool:
         from PyQt6.QtCore import QEvent, Qt
-        from PyQt6.QtWidgets import QLineEdit, QAbstractSpinBox
+        from PyQt6.QtWidgets import QLineEdit, QAbstractSpinBox, QListWidget
         
         if hasattr(self, "tabs") and watched == self.tabs.tabBar():
             if event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
@@ -671,8 +673,12 @@ class MainWindow(QMainWindow):
                     self.search_overlay.execute_selected_row()
                     return True
             
-            # Don't intercept other keys if user is actively typing in a text field or spinbox
+            # Don't intercept any keys if user is actively typing in a text field or spinbox
             if isinstance(focus_widget, (QLineEdit, QAbstractSpinBox)):
+                return super().eventFilter(watched, event)
+                
+            # Allow QListWidget (Queue) to handle its own navigation and action keys, but let other keys (Space, Left, Right) pass through to global shortcuts
+            if isinstance(focus_widget, QListWidget) and key in (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Delete):
                 return super().eventFilter(watched, event)
 
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
