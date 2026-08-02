@@ -47,8 +47,11 @@ def write_track_metadata(
     artists = [a.strip() for a in artists if a.strip()] if artists else ["Unknown Artist"]
     if not artists:
         artists = ["Unknown Artist"]
-    album_artists = [a.strip() for a in album_artists if a.strip()] if album_artists else ["Unknown Artist"]
-    if not album_artists:
+        
+    album_artists_list = [a.strip() for a in album_artists if a.strip()]
+    if album_artists_list:
+        album_artists = [" & ".join(album_artists_list)]
+    else:
         album_artists = ["Unknown Artist"]
 
     ext = os.path.splitext(filepath)[1].lower()
