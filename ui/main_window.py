@@ -15,6 +15,8 @@ Step 3+4 additions:
 
 from __future__ import annotations
 
+import sys
+
 from PyQt6.QtCore import QSize, Qt, QPropertyAnimation, QParallelAnimationGroup, QEasingCurve, QRect, QPoint, QEvent, QTimer
 from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtMultimedia import QMediaDevices
@@ -730,13 +732,16 @@ class MainWindow(QMainWindow):
                 self.engine.toggle_play_pause()
                 return True
             elif key in (Qt.Key.Key_MediaPlay, Qt.Key.Key_MediaTogglePlayPause):
-                self.engine.toggle_play_pause()
+                if sys.platform != "win32":
+                    self.engine.toggle_play_pause()
                 return True
             elif key == Qt.Key.Key_MediaNext:
-                self.engine.next_track()
+                if sys.platform != "win32":
+                    self.engine.next_track()
                 return True
             elif key == Qt.Key.Key_MediaPrevious:
-                self.engine.prev_track()
+                if sys.platform != "win32":
+                    self.engine.prev_track()
                 return True
             elif key == Qt.Key.Key_Up:
                 active_view = self._get_active_view()

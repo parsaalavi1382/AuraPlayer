@@ -1,17 +1,18 @@
 .venv/
 library_cache.json
 .md_temp/
+data/
 
 # Python bytecode and cache
 __pycache__/
 *.pyc
+*.tmp
+*.log
+smtc_cover.jpg
 
 test_music/
-
 playlist_covers/
-
 .music-sync.json
-
 .run.bat
 
 build/
