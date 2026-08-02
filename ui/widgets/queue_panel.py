@@ -912,13 +912,20 @@ class QueuePanel(QFrame):
 
 
     def refresh(self) -> None:
-        current_row = self.list_widget.currentRow()
+        curr_item = self.list_widget.currentItem()
+        current_path = curr_item.data(Qt.ItemDataRole.UserRole) if curr_item else None
+        
+        v_bar = self.list_widget.verticalScrollBar()
+        scroll_pos = v_bar.value() if v_bar else 0
         
         self.list_widget.blockSignals(True)
         self.list_widget.clear()
 
         queue = self.engine.get_queue()
         active_idx = self.engine.get_queue_index()
+
+        selected_item = None
+        active_item = None
 
         for i, path in enumerate(queue):
             track = self.store.get_track(path)
@@ -949,17 +956,23 @@ class QueuePanel(QFrame):
             item.setSizeHint(widget.sizeHint())
             self.list_widget.setItemWidget(item, widget)
 
-            # Restore the user's previous selection if they are actively navigating (focused),
-            # otherwise default to the active track so it stays in sync.
-            has_focus = self.list_widget.hasFocus()
-            if has_focus and current_row != -1:
-                if i == current_row:
-                    self.list_widget.setCurrentItem(item)
-            else:
-                if is_active:
-                    self.list_widget.setCurrentItem(item)
+            if is_active:
+                active_item = item
+
+            if current_path and path == current_path:
+                selected_item = item
+
+        has_focus = self.list_widget.hasFocus()
+        if has_focus and selected_item:
+            self.list_widget.setCurrentItem(selected_item)
+        elif active_item:
+            self.list_widget.setCurrentItem(active_item)
 
         self.list_widget.blockSignals(False)
+
+        if v_bar:
+            v_bar.setValue(scroll_pos)
+
         self._update_animation_timer()
         # Force overlay update on the restored selection
         self.list_widget._update_all_item_overlays()
