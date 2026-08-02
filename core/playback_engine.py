@@ -135,6 +135,11 @@ class PlaybackEngine(QObject):
         from core.smtc import SMTCIntegration
         self.smtc = SMTCIntegration(self)
         self.track_changed.connect(self._update_smtc_metadata_for_track)
+        
+        current_path = self.get_current_track_path()
+        if current_path:
+            self._update_smtc_metadata_for_track(current_path)
+            self.smtc.update_playback_status(is_playing=False)
 
     def _update_smtc_metadata_for_track(self, path: str) -> None:
         track = self.store.get_track(path)
