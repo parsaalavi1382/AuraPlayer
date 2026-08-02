@@ -140,7 +140,7 @@ class PlaybackEngine(QObject):
         track = self.store.get_track(path)
         if track and hasattr(self, "smtc"):
             artist_str = ", ".join(track.artists) if hasattr(track, "artists") else "Unknown Artist"
-            self.smtc.update_metadata(track.title, artist_str, track.album)
+            self.smtc.update_metadata(track.title, artist_str, track.album, track.path)
 
     # ============================================================
     # State Machine Authority (Single Source of Truth)

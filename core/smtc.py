@@ -70,7 +70,7 @@ class SMTCIntegration(QObject):
         elif btn == self._ButtonEnum.STOP:
             self.stop_requested.emit()
 
-    def update_metadata(self, title: str, artist: str, album: str = ""):
+    def update_metadata(self, title: str, artist: str, album: str = "", track_path: str = ""):
         if not self._updater:
             return
         try:
@@ -79,6 +79,29 @@ class SMTCIntegration(QObject):
             props.artist = artist
             props.album_artist = artist
             props.album_title = album
+            
+            if track_path:
+                from core.metadata_reader import _extract_raw_album_art_bytes
+                from utils.paths import get_writable_data_path
+                import os
+                
+                raw_bytes = _extract_raw_album_art_bytes(track_path)
+                if raw_bytes:
+                    smtc_cover_path = get_writable_data_path("smtc_cover.jpg")
+                    with open(smtc_cover_path, "wb") as f:
+                        f.write(raw_bytes)
+                        
+                    from winrt.windows.foundation import Uri
+                    from winrt.windows.storage.streams import RandomAccessStreamReference
+                    
+                    abs_path = os.path.abspath(smtc_cover_path).replace('\\', '/')
+                    uri = Uri(f"file:///{abs_path}")
+                    self._updater.thumbnail = RandomAccessStreamReference.create_from_uri(uri)
+                else:
+                    self._updater.thumbnail = None
+            else:
+                self._updater.thumbnail = None
+                
             self._updater.update()
         except Exception as e:
             logging.warning(f"SMTC metadata update failed: {e}")
