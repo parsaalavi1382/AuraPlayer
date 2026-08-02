@@ -200,7 +200,7 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
         if col not in (COL_TRACK_NO, COL_TITLE, COL_ARTISTS, COL_GENRE):
             opt = QStyleOptionViewItem(option)
             self.initStyleOption(opt, index)
-            if index.row() == getattr(self, 'hovered_row', -1):
+            if index.row() == getattr(self, 'hovered_row', -1) or bool(option.state & QStyle.StateFlag.State_Selected):
                 opt.state |= QStyle.StateFlag.State_MouseOver
             else:
                 opt.state &= ~QStyle.StateFlag.State_MouseOver
@@ -212,7 +212,7 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
         self.initStyleOption(opt, index)
         opt.text = ""
 
-        if index.row() == getattr(self, 'hovered_row', -1):
+        if index.row() == getattr(self, 'hovered_row', -1) or bool(option.state & QStyle.StateFlag.State_Selected):
             opt.state |= QStyle.StateFlag.State_MouseOver
         else:
             opt.state &= ~QStyle.StateFlag.State_MouseOver
@@ -236,7 +236,7 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
             is_current = (self.view.engine.get_current_track_path() == track.path)
             is_playing = is_current and self.view.engine.is_playing()
 
-        is_row_hovered = (index.row() == self.hovered_row)
+        is_row_hovered = (index.row() == self.hovered_row) or bool(option.state & QStyle.StateFlag.State_Selected)
 
         theme_key = self.view.store.cache.settings.theme
         theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
@@ -584,7 +584,7 @@ class AlbumPageView(QWidget):
         self.scroll_layout.addWidget(self.tables_container)
 
         self.animation_timer = QTimer(self)
-        self.animation_timer.setInterval(120)
+        self.animation_timer.setInterval(50)
         self.animation_timer.timeout.connect(self._on_animation_tick)
 
         if self.engine:
@@ -593,6 +593,103 @@ class AlbumPageView(QWidget):
 
         self.refresh()
         self._update_animation_timer()
+
+    def _ensure_album_art_visible(self) -> None:
+        scroll_bar = self.scroll.verticalScrollBar()
+        if scroll_bar:
+            scroll_bar.setValue(0)
+
+    def _get_active_table(self) -> QTableView | None:
+        if not hasattr(self, "_tables") or not self._tables:
+            return None
+        for t in self._tables:
+            if t.hasFocus():
+                return t
+        for t in self._tables:
+            sm = t.selectionModel()
+            if sm and sm.hasSelection():
+                return t
+        for t in self._tables:
+            if t.currentIndex().isValid() and t.currentIndex().row() >= 0:
+                return t
+        return self._tables[0]
+
+    def _on_table_activated(self, active_table: QTableView) -> None:
+        if not hasattr(self, "_tables"): return
+        for t in self._tables:
+            if t != active_table:
+                t.clearSelection()
+                t.setCurrentIndex(QModelIndex())
+
+    def _ensure_row_visible(self, table, row: int) -> None:
+        if not table or row < 0: return
+        from PyQt6.QtCore import QPoint
+        table.setFocus()
+        self._on_table_activated(table)
+        model = table.model()
+        if model and 0 <= row < model.rowCount():
+            table.setCurrentIndex(model.index(row, 0))
+            table.selectRow(row)
+        header_h = table.horizontalHeader().height() or 30
+        row_h = table.verticalHeader().defaultSectionSize() or 36
+        try:
+            row_y = table.mapTo(self.scroll_content, QPoint(0, header_h + row * row_h)).y()
+            sb = self.scroll.verticalScrollBar()
+            if sb:
+                val = sb.value()
+                view_h = self.scroll.viewport().height()
+                if row_y < val:
+                    sb.setValue(max(0, row_y - 20))
+                elif row_y + row_h > val + view_h:
+                    sb.setValue(row_y + row_h - view_h + 20)
+        except Exception:
+            pass
+
+    def navigate_up(self) -> None:
+        table = self._get_active_table()
+        if not table: return
+        model = table.model()
+        if not model or model.rowCount() == 0: return
+        
+        curr_table_idx = self._tables.index(table) if table in self._tables else 0
+        curr_row = table.currentIndex().row()
+        
+        if curr_row <= 0:
+            if curr_table_idx > 0:
+                table.clearSelection()
+                table.setCurrentIndex(QModelIndex())
+                prev_table = self._tables[curr_table_idx - 1]
+                prev_model = prev_table.model()
+                if prev_model and prev_model.rowCount() > 0:
+                    self._ensure_row_visible(prev_table, prev_model.rowCount() - 1)
+            else:
+                self._ensure_row_visible(table, 0)
+        else:
+            self._ensure_row_visible(table, curr_row - 1)
+
+    def navigate_down(self) -> None:
+        table = self._get_active_table()
+        if not table: return
+        model = table.model()
+        if not model or model.rowCount() == 0: return
+        
+        curr_table_idx = self._tables.index(table) if table in self._tables else 0
+        curr_row = table.currentIndex().row()
+        
+        if curr_row < 0:
+            self._ensure_row_visible(table, 0)
+        elif curr_row + 1 < model.rowCount():
+            self._ensure_row_visible(table, curr_row + 1)
+        else:
+            if curr_table_idx + 1 < len(self._tables):
+                table.clearSelection()
+                table.setCurrentIndex(QModelIndex())
+                next_table = self._tables[curr_table_idx + 1]
+                next_model = next_table.model()
+                if next_model and next_model.rowCount() > 0:
+                    self._ensure_row_visible(next_table, 0)
+            else:
+                self._ensure_row_visible(table, model.rowCount() - 1)
 
     def resize_tables_to_contents(self) -> None:
         for table in self._tables:
@@ -845,8 +942,10 @@ class AlbumPageView(QWidget):
             hover_filter = AlbumHoverEventFilter(table, delegate, self)
             table.viewport().installEventFilter(hover_filter)
 
-            # Double-click handler
-            table.doubleClicked.connect(lambda index, m=model: self._on_row_double_clicked(index, m))
+            # Click & Activation handlers
+            table.pressed.connect(lambda idx, t=table: self._on_table_activated(t))
+            table.clicked.connect(lambda idx, t=table: self._on_table_activated(t))
+            table.doubleClicked.connect(lambda index, m=model, t=table: (self._on_table_activated(t), self._on_row_double_clicked(index, m)))
 
             # Context menu handler
             table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -966,6 +1065,22 @@ class AlbumPageView(QWidget):
 
     def refresh_from_signal(self, *args) -> None:
         try:
+            if args and isinstance(args[0], str):
+                track_path = args[0]
+                if not hasattr(self, "store") or not self.store.get_track(track_path):
+                    self.refresh()
+                    return
+                if hasattr(self, "_tables"):
+                    for t in self._tables:
+                        model = t.model()
+                        if model:
+                            for row in range(model.rowCount()):
+                                track = model.track_at(row)
+                                if track and track.path == track_path:
+                                    idx_start = model.index(row, 0)
+                                    idx_end = model.index(row, model.columnCount() - 1)
+                                    model.dataChanged.emit(idx_start, idx_end, [])
+                return
             self.refresh()
         except RuntimeError:
             pass

@@ -18,10 +18,11 @@ from __future__ import annotations
 from PyQt6.QtCore import QSize, Qt, QPropertyAnimation, QParallelAnimationGroup, QEasingCurve, QRect, QPoint, QEvent, QTimer
 from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtMultimedia import QMediaDevices
+from PyQt6.QtWidgets import QTableView
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTabBar,
     QMessageBox, QApplication, QStackedWidget, QFrame, QPushButton, QLabel,
-    QGraphicsOpacityEffect,
+    QGraphicsOpacityEffect, QTableView,
 )
 
 from core.library_store import LibraryStore
@@ -343,6 +344,14 @@ class MainWindow(QMainWindow):
         # Trigger startup sync shortly after window loads
         QTimer.singleShot(100, self._run_startup_sync)
 
+        # Install application-wide event filter for global keyboard shortcuts & click-outside handling
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(self)
+
+        # Ensure search input is not focused by default on startup
+        QTimer.singleShot(0, lambda: self.setFocus())
+
     # ------------------------------------------------------------------
     # Theme application
     # ------------------------------------------------------------------
@@ -508,6 +517,12 @@ class MainWindow(QMainWindow):
             self._animate_nav_transition(widget, mode="fade")
 
     def _animate_nav_transition(self, target_widget: QWidget, mode: str = "fade") -> None:
+        if hasattr(self, "top_bar") and hasattr(self.top_bar, "search_input"):
+            self.top_bar.search_input.clearFocus()
+        if hasattr(self, "search_overlay"):
+            self.search_overlay.hide_search()
+        self.setFocus()
+
         if not target_widget:
             return
 
@@ -625,7 +640,9 @@ class MainWindow(QMainWindow):
             self.tabs.setTabIcon(i, icon)
 
     def eventFilter(self, watched, event) -> bool:
-        from PyQt6.QtCore import QEvent
+        from PyQt6.QtCore import QEvent, Qt
+        from PyQt6.QtWidgets import QLineEdit, QAbstractSpinBox
+        
         if hasattr(self, "tabs") and watched == self.tabs.tabBar():
             if event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
                 self._update_tab_indicator(animate=False)
@@ -634,6 +651,185 @@ class MainWindow(QMainWindow):
                 self._update_tab_icons(hovered_idx=idx)
             elif event.type() in (QEvent.Type.Leave, QEvent.Type.HoverLeave):
                 self._update_tab_icons(hovered_idx=-1)
+                
+        # --- Global Keyboard Shortcuts ---
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            focus_widget = QApplication.focusWidget()
+
+            # Handle Search Overlay navigation & execution when active
+            if hasattr(self, "search_overlay") and self.search_overlay.isVisible():
+                if key == Qt.Key.Key_Up:
+                    self.search_overlay.navigate_up()
+                    return True
+                elif key == Qt.Key.Key_Down:
+                    self.search_overlay.navigate_down()
+                    return True
+                elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    self.search_overlay.execute_selected_row()
+                    return True
+            
+            # Don't intercept other keys if user is actively typing in a text field or spinbox
+            if isinstance(focus_widget, (QLineEdit, QAbstractSpinBox)):
+                return super().eventFilter(watched, event)
+
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if hasattr(self, "search_overlay") and self.search_overlay.isVisible():
+                    self.search_overlay.execute_selected_row()
+                    return True
+                focus_w = QApplication.focusWidget()
+                if focus_w and hasattr(focus_w, "clicked") and hasattr(focus_w, "album_key"):
+                    focus_w.clicked.emit(focus_w.album_key)
+                    return True
+                
+                table = None
+                if isinstance(focus_w, QTableView):
+                    table = focus_w
+                else:
+                    active_view = self._get_active_view()
+                    if active_view:
+                        if hasattr(active_view, "_get_active_table"):
+                            table = active_view._get_active_table()
+                        elif hasattr(active_view, "table") and active_view.table:
+                            table = active_view.table
+                        elif hasattr(active_view, "_tables") and active_view._tables:
+                            for t in active_view._tables:
+                                if t.hasFocus() or (t.currentIndex().isValid() and t.currentIndex().row() >= 0):
+                                    table = t
+                                    break
+                            if not table and active_view._tables:
+                                table = active_view._tables[0]
+
+                if table:
+                    curr_idx = table.currentIndex()
+                    if not curr_idx.isValid() or curr_idx.row() < 0:
+                        model = table.model()
+                        if model and model.rowCount() > 0:
+                            curr_idx = model.index(0, 0)
+
+                    if curr_idx.isValid() and curr_idx.row() >= 0:
+                        table.doubleClicked.emit(curr_idx)
+                        table.setFocus()
+                        table.setCurrentIndex(curr_idx)
+                        table.selectRow(curr_idx.row())
+                        active_view = self._get_active_view()
+                        if active_view:
+                            if hasattr(active_view, "_ensure_row_visible"):
+                                try:
+                                    import inspect
+                                    sig = inspect.signature(active_view._ensure_row_visible)
+                                    if len(sig.parameters) == 2:
+                                        active_view._ensure_row_visible(table, curr_idx.row())
+                                    else:
+                                        active_view._ensure_row_visible(curr_idx.row())
+                                except Exception:
+                                    pass
+                        return True
+                return False
+            elif key == Qt.Key.Key_Space:
+                self.engine.toggle_play_pause()
+                return True
+            elif key in (Qt.Key.Key_MediaPlay, Qt.Key.Key_MediaTogglePlayPause):
+                self.engine.toggle_play_pause()
+                return True
+            elif key == Qt.Key.Key_MediaNext:
+                self.engine.next_track()
+                return True
+            elif key == Qt.Key.Key_MediaPrevious:
+                self.engine.prev_track()
+                return True
+            elif key == Qt.Key.Key_Up:
+                active_view = self._get_active_view()
+                if active_view:
+                    if hasattr(active_view, "navigate_up"):
+                        active_view.navigate_up()
+                        return True
+                    elif hasattr(active_view, "table"):
+                        table = active_view.table
+                        if table:
+                            table.setFocus()
+                            model = table.model()
+                            rowCount = model.rowCount() if model else 0
+                            if rowCount > 0:
+                                curr_row = table.currentIndex().row()
+                                if curr_row <= 0:
+                                    table.setCurrentIndex(model.index(0, 0))
+                                else:
+                                    table.setCurrentIndex(model.index(curr_row - 1, 0))
+                            return True
+                return False
+
+            elif key == Qt.Key.Key_Down:
+                active_view = self._get_active_view()
+                if active_view:
+                    if hasattr(active_view, "navigate_down"):
+                        active_view.navigate_down()
+                        return True
+                    elif hasattr(active_view, "table"):
+                        table = active_view.table
+                        if table:
+                            table.setFocus()
+                            model = table.model()
+                            rowCount = model.rowCount() if model else 0
+                            if rowCount > 0:
+                                curr_row = table.currentIndex().row()
+                                if curr_row < 0:
+                                    table.setCurrentIndex(model.index(0, 0))
+                                elif curr_row + 1 < rowCount:
+                                    table.setCurrentIndex(model.index(curr_row + 1, 0))
+                                else:
+                                    table.setCurrentIndex(model.index(rowCount - 1, 0))
+                            return True
+                return False
+            elif key == Qt.Key.Key_Right:
+                if not event.isAutoRepeat():
+                    self.engine.start_seek_forward()
+                return True
+            elif key == Qt.Key.Key_Left:
+                if not event.isAutoRepeat():
+                    self.engine.start_seek_back()
+                return True
+
+        elif event.type() == QEvent.Type.KeyRelease:
+            key = event.key()
+            focus_widget = QApplication.focusWidget()
+            if isinstance(focus_widget, (QLineEdit, QAbstractSpinBox)):
+                return super().eventFilter(watched, event)
+
+            if key == Qt.Key.Key_Right:
+                if not event.isAutoRepeat():
+                    self.engine.stop_seek()
+                return True
+            elif key == Qt.Key.Key_Left:
+                if not event.isAutoRepeat():
+                    self.engine.stop_seek()
+                return True
+
+        # --- Mouse Press: Deactivate search when clicking outside ---
+        elif event.type() == QEvent.Type.MouseButtonPress:
+            if hasattr(self, "top_bar") and hasattr(self.top_bar, "search_input"):
+                search_inp = self.top_bar.search_input
+                overlay_visible = hasattr(self, "search_overlay") and self.search_overlay.isVisible()
+                if search_inp.hasFocus() or overlay_visible:
+                    click_pos = event.globalPosition().toPoint() if hasattr(event, "globalPosition") else event.globalPos()
+                    
+                    in_search_bar = False
+                    if hasattr(self.top_bar, "search_bar_frame"):
+                        sb_rect = QRect(self.top_bar.search_bar_frame.mapToGlobal(QPoint(0, 0)), self.top_bar.search_bar_frame.size())
+                        if sb_rect.contains(click_pos):
+                            in_search_bar = True
+
+                    in_search_modal = False
+                    if overlay_visible and hasattr(self.search_overlay, "modal_box"):
+                        mb_rect = QRect(self.search_overlay.modal_box.mapToGlobal(QPoint(0, 0)), self.search_overlay.modal_box.size())
+                        if mb_rect.contains(click_pos):
+                            in_search_modal = True
+
+                    if not in_search_bar and not in_search_modal:
+                        search_inp.clearFocus()
+                        if overlay_visible:
+                            self.search_overlay.hide_search()
+
         return super().eventFilter(watched, event)
 
     # ------------------------------------------------------------------

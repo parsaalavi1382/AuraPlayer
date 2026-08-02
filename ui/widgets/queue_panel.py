@@ -754,7 +754,7 @@ class QueuePanel(QFrame):
 
         self.animation_timer = QTimer(self)
 
-        self.animation_timer.setInterval(120)  # ~8 fps
+        self.animation_timer.setInterval(50)  # ~20 fps
 
         self.animation_timer.timeout.connect(self._on_animation_tick)
 

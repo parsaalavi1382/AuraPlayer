@@ -106,7 +106,7 @@ class GenrePageView(QWidget):
 
         # --- Animation timer for Equalizer ---
         self.animation_timer = QTimer(self)
-        self.animation_timer.setInterval(120)
+        self.animation_timer.setInterval(50)
         self.animation_timer.timeout.connect(self._on_animation_tick)
 
         if self.engine:
@@ -265,6 +265,21 @@ class GenrePageView(QWidget):
 
     def refresh_from_signal(self, *args) -> None:
         try:
+            if args and isinstance(args[0], str):
+                track_path = args[0]
+                if not hasattr(self, "store") or not self.store.get_track(track_path):
+                    self.refresh()
+                    return
+                if hasattr(self, "table") and self.table:
+                    model = self.table.model()
+                    if model:
+                        for row in range(model.rowCount()):
+                            track = model.track_at(row)
+                            if track and track.path == track_path:
+                                idx_start = model.index(row, 0)
+                                idx_end = model.index(row, model.columnCount() - 1)
+                                model.dataChanged.emit(idx_start, idx_end, [])
+                return
             self.refresh()
         except RuntimeError:
             pass
@@ -282,3 +297,48 @@ class GenrePageView(QWidget):
             self.store.track_updated.disconnect(self.refresh_from_signal)
         except (TypeError, RuntimeError):
             pass
+
+    def _ensure_row_visible(self, row: int) -> None:
+        if not self.table or row < 0: return
+        from PyQt6.QtCore import QPoint
+        self.table.setFocus()
+        model = self.table.model()
+        if model and 0 <= row < model.rowCount():
+            self.table.setCurrentIndex(model.index(row, 0))
+            self.table.selectRow(row)
+        header_h = self.table.horizontalHeader().height() or 30
+        row_h = self.table.verticalHeader().defaultSectionSize() or 36
+        try:
+            row_y = self.table.mapTo(self.scroll_content, QPoint(0, header_h + row * row_h)).y()
+            sb = self.scroll.verticalScrollBar()
+            if sb:
+                val = sb.value()
+                view_h = self.scroll.viewport().height()
+                if row_y < val:
+                    sb.setValue(max(0, row_y - 20))
+                elif row_y + row_h > val + view_h:
+                    sb.setValue(row_y + row_h - view_h + 20)
+        except Exception:
+            pass
+
+    def navigate_up(self) -> None:
+        if not self.table: return
+        model = self.table.model()
+        if not model or model.rowCount() == 0: return
+        curr_row = self.table.currentIndex().row()
+        if curr_row <= 0:
+            self._ensure_row_visible(0)
+        else:
+            self._ensure_row_visible(curr_row - 1)
+
+    def navigate_down(self) -> None:
+        if not self.table: return
+        model = self.table.model()
+        if not model or model.rowCount() == 0: return
+        curr_row = self.table.currentIndex().row()
+        if curr_row < 0:
+            self._ensure_row_visible(0)
+        elif curr_row + 1 < model.rowCount():
+            self._ensure_row_visible(curr_row + 1)
+        else:
+            self._ensure_row_visible(model.rowCount() - 1)

@@ -138,7 +138,7 @@ class StaticCoverLabel(QLabel):
 
 
 class CoverThumbButton(QFrame):
-    """Square thumbnail cover button that shows a play overlay icon on mouse hover."""
+    """Square thumbnail cover button that shows a play overlay icon on mouse hover or EQ animation when playing."""
     clicked = pyqtSignal()
 
     def __init__(self, size: int = 42, parent=None):
@@ -149,10 +149,27 @@ class CoverThumbButton(QFrame):
         self._play_icon: QPixmap | None = None
         self._hovered = False
         self._row_hovered = False
+        self._is_playing = False
+        self._accent_color = "#61AFEF"
+        self._anim_timer: QTimer | None = None
 
     def set_cover(self, pixmap: QPixmap | None, play_icon: QPixmap | None) -> None:
         self._pixmap = pixmap
         self._play_icon = play_icon
+        self.update()
+
+    def set_playing(self, is_playing: bool, accent_color: str = "#61AFEF") -> None:
+        self._is_playing = is_playing
+        self._accent_color = accent_color
+        if is_playing:
+            if self._anim_timer is None:
+                self._anim_timer = QTimer(self)
+                self._anim_timer.timeout.connect(self.update)
+            if not self._anim_timer.isActive():
+                self._anim_timer.start(50)
+        else:
+            if self._anim_timer and self._anim_timer.isActive():
+                self._anim_timer.stop()
         self.update()
 
     def set_row_hovered(self, hovered: bool) -> None:
@@ -176,12 +193,42 @@ class CoverThumbButton(QFrame):
         super().mousePressEvent(event)
 
     def paintEvent(self, event) -> None:
+        import time, math
+        from PyQt6.QtCore import QRectF
+        from PyQt6.QtGui import QBrush
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         if self._pixmap and not self._pixmap.isNull():
             painter.drawPixmap(0, 0, self.width(), self.height(), self._pixmap)
-        if self._hovered or self._row_hovered:
+            
+        if self._is_playing:
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
+            max_bar_h = 14
+            bar_w = 3
+            spacing = 2
+            eq_w = 3 * bar_w + 2 * spacing
+            eq_x = (self.width() - eq_w) // 2
+            eq_y = (self.height() - max_bar_h) // 2
+
+            t = time.time()
+            h1 = 0.2 + 0.7 * abs(math.sin(t * 9.0))
+            h2 = 0.3 + 0.6 * abs(math.sin(t * 13.0 + 1.5))
+            h3 = 0.1 + 0.8 * abs(math.sin(t * 7.5 + 3.0))
+
+            heights = [h1 * max_bar_h, h2 * max_bar_h, h3 * max_bar_h]
+
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor("#FFFFFF")))
+            for i, h in enumerate(heights):
+                x = eq_x + i * (bar_w + spacing)
+                y = (eq_y + max_bar_h) - h
+                painter.drawRect(QRectF(x, y, bar_w, h))
+            painter.restore()
+        elif self._hovered or self._row_hovered:
             painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
             if self._play_icon and not self._play_icon.isNull():
                 iw = self._play_icon.width()
@@ -202,6 +249,14 @@ class BaseSearchRow(QFrame):
         self._hover_bg_color = "#3E4452"
         self._apply_style()
 
+    def set_row_hovered(self, hovered: bool) -> None:
+        self.setProperty("hovered", hovered)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        if hasattr(self, "cover_btn") and hasattr(self.cover_btn, "set_row_hovered"):
+            self.cover_btn.set_row_hovered(hovered)
+        self.update()
+
     def set_row_colors(self, bg: str, hover_bg: str) -> None:
         self._bg_color = bg
         self._hover_bg_color = hover_bg
@@ -213,7 +268,7 @@ class BaseSearchRow(QFrame):
                 background-color: {self._bg_color};
                 border-radius: 8px;
             }}
-            QFrame#SearchRow:hover {{
+            QFrame#SearchRow:hover, QFrame#SearchRow[hovered="true"] {{
                 background-color: {self._hover_bg_color};
             }}
         """)
@@ -460,6 +515,43 @@ class SearchSectionWidget(QFrame):
             }}
         """)
 
+    def get_rows(self) -> list[BaseSearchRow]:
+        rows = []
+        for i in range(self.rows_layout.count()):
+            item = self.rows_layout.itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), BaseSearchRow):
+                rows.append(item.widget())
+        return rows
+
+    def get_interactive_items(self) -> list[QWidget]:
+        items: list[QWidget] = []
+        for i in range(self.rows_layout.count()):
+            item = self.rows_layout.itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), BaseSearchRow):
+                items.append(item.widget())
+        if self.toggle_btn.isVisible():
+            items.append(self.toggle_btn)
+        return items
+
+    def set_button_focused(self, focused: bool) -> None:
+        theme = self.overlay._current_theme
+        accent = theme.get('accent', '#61AFEF')
+        bg = theme.get('surface_hover', '#3E4452') if focused else 'transparent'
+        text_dec = 'underline' if focused else 'none'
+        border = f"1px solid {accent}" if focused else "none"
+        self.toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg};
+                color: {accent};
+                border: {border};
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 4px 8px;
+                text-decoration: {text_dec};
+            }}
+        """)
+
     def update_items(self, items: list[Any], query: str, theme: dict[str, Any]) -> None:
         self.items = items
         self.query = query
@@ -474,6 +566,8 @@ class SearchSectionWidget(QFrame):
     def _on_toggle_clicked(self) -> None:
         self._expanded = not self._expanded
         self._render_rows(self.overlay._current_theme)
+        if hasattr(self.overlay, "_update_row_focus"):
+            self.overlay._update_row_focus()
 
     def _render_rows(self, theme: dict[str, Any]) -> None:
         while self.rows_layout.count():
@@ -583,6 +677,11 @@ class SearchOverlay(QFrame):
         self._art_cache: dict[str, QPixmap] = {}
         self._current_theme = THEMES[DEFAULT_THEME]
         self._query_text = ""
+        self._focused_row_index: int = -1
+
+        if self.engine:
+            self.engine.track_changed.connect(self._on_playback_changed)
+            self.engine.playback_state_changed.connect(self._on_playback_changed)
 
         backdrop_layout = QVBoxLayout(self)
         backdrop_layout.setContentsMargins(0, 4, 0, 20)
@@ -719,6 +818,15 @@ class SearchOverlay(QFrame):
         if event.key() == Qt.Key.Key_Escape:
             self.hide_search()
             event.accept()
+        elif event.key() in (Qt.Key.Key_Down, Qt.Key.Key_Tab):
+            self.navigate_down()
+            event.accept()
+        elif event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Backtab):
+            self.navigate_up()
+            event.accept()
+        elif event.key() in (Qt.Key.Key_Enter, Qt.Key.Key_Return):
+            self.execute_selected_row()
+            event.accept()
         else:
             super().keyPressEvent(event)
 
@@ -733,6 +841,7 @@ class SearchOverlay(QFrame):
         self.debounce_timer.start(180)
 
     def _perform_search(self) -> None:
+        self._focused_row_index = -1
         query = self._query_text.strip()
         if not query:
             self.scroll_area.setVisible(False)
@@ -778,6 +887,79 @@ class SearchOverlay(QFrame):
         self.albums_sec.update_items(matched_albums, query, theme)
         self.genres_sec.update_items(matched_genres, query, theme)
         self.playlists_sec.update_items(matched_playlists, query, theme)
+        self._update_playback_state()
+
+    def _on_playback_changed(self, *args) -> None:
+        self._update_playback_state()
+
+    def _update_playback_state(self) -> None:
+        current_path = self.engine.get_current_track_path() if self.engine else ""
+        is_playing = self.engine.is_playing() if self.engine else False
+
+        for sec in (self.tracks_sec, self.artists_sec, self.albums_sec, self.genres_sec, self.playlists_sec):
+            for row in sec.get_rows():
+                if hasattr(row, "track") and hasattr(row, "cover_btn"):
+                    playing = (row.track.path == current_path) and is_playing
+                    row.cover_btn.set_playing(playing, self._current_theme.get("accent", "#61AFEF"))
+
+    def _get_all_result_rows(self) -> list[QWidget]:
+        items: list[QWidget] = []
+        for sec in (self.tracks_sec, self.artists_sec, self.albums_sec, self.genres_sec, self.playlists_sec):
+            if sec.isVisible():
+                items.extend(sec.get_interactive_items())
+        return items
+
+    def _update_row_focus(self) -> None:
+        items = self._get_all_result_rows()
+        if not items:
+            self._focused_row_index = -1
+            return
+        self._focused_row_index = max(0, min(self._focused_row_index, len(items) - 1))
+        
+        for sec in (self.tracks_sec, self.artists_sec, self.albums_sec, self.genres_sec, self.playlists_sec):
+            sec.set_button_focused(False)
+
+        for idx, item in enumerate(items):
+            is_focused = (idx == self._focused_row_index)
+            if isinstance(item, BaseSearchRow):
+                item.set_row_hovered(is_focused)
+            elif isinstance(item, QPushButton):
+                for sec in (self.tracks_sec, self.artists_sec, self.albums_sec, self.genres_sec, self.playlists_sec):
+                    if sec.toggle_btn == item:
+                        sec.set_button_focused(is_focused)
+                        break
+            if is_focused:
+                self.scroll_area.ensureWidgetVisible(item)
+
+    def navigate_down(self) -> None:
+        rows = self._get_all_result_rows()
+        if not rows:
+            return
+        self._focused_row_index += 1
+        if self._focused_row_index >= len(rows):
+            self._focused_row_index = 0
+        self._update_row_focus()
+
+    def navigate_up(self) -> None:
+        rows = self._get_all_result_rows()
+        if not rows:
+            return
+        if self._focused_row_index <= 0:
+            self._focused_row_index = len(rows) - 1
+        else:
+            self._focused_row_index -= 1
+        self._update_row_focus()
+
+    def execute_selected_row(self) -> None:
+        items = self._get_all_result_rows()
+        if not items or self._focused_row_index < 0 or self._focused_row_index >= len(items):
+            return
+        item = items[self._focused_row_index]
+        if isinstance(item, BaseSearchRow):
+            if hasattr(item, "double_clicked"):
+                item.double_clicked.emit()
+        elif isinstance(item, QPushButton):
+            item.click()
 
     def _get_cover_pixmap(self, path: str, has_art: bool, size: int = 42) -> QPixmap | None:
         if not path:
@@ -811,7 +993,6 @@ class SearchOverlay(QFrame):
             return
         shuffle = self.engine.get_shuffle()
         self.engine.play_all(paths, shuffle=shuffle, start_track_path=start_path)
-        self.hide_search()
 
     def _show_row_context_menu(self, pos: QPoint, tracks: list[Track]) -> None:
         if not tracks:

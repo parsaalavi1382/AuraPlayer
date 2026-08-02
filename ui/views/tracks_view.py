@@ -126,7 +126,7 @@ class TracksView(QWidget):
 
         # --- Animation timer for Equalizer ---
         self.animation_timer = QTimer(self)
-        self.animation_timer.setInterval(120)  # ~8 fps
+        self.animation_timer.setInterval(50)  # ~20 fps
         self.animation_timer.timeout.connect(self._on_animation_tick)
         
         if self.engine:
@@ -177,7 +177,22 @@ class TracksView(QWidget):
         sort_asc = getattr(self.model, "_sort_ascending", True)
         self.model.sort_alphabetical(sort_col, sort_asc)
 
-    def _on_tracks_changed(self, *_args) -> None:
+    def _on_tracks_changed(self, *args) -> None:
+        if args and isinstance(args[0], str):
+            track_path = args[0]
+            if not self.store or not self.store.get_track(track_path):
+                self.refresh()
+                return
+            if hasattr(self, "table") and self.table:
+                model = self.table.model()
+                if model:
+                    for row in range(model.rowCount()):
+                        track = model.track_at(row)
+                        if track and track.path == track_path:
+                            idx_start = model.index(row, 0)
+                            idx_end = model.index(row, model.columnCount() - 1)
+                            model.dataChanged.emit(idx_start, idx_end, [])
+            return
         self.refresh()
 
     def _on_header_clicked(self, index: int) -> None:
@@ -433,7 +448,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 is_current = (self.view.engine.get_current_track_path() == track.path)
                 is_playing = is_current and self.view.engine.is_playing()
                 
-            is_row_hovered = (index.row() == self.hovered_row)
+            is_row_hovered = (index.row() == self.hovered_row) or bool(option.state & QStyle.StateFlag.State_Selected)
             
             # Get theme colors
             bg_color = QColor(theme['surface'])

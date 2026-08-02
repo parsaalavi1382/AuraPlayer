@@ -29,6 +29,7 @@ class AlbumCard(QWidget):
         super().__init__(parent)
         self.album_key = album_key
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
         # Resolve active theme
         store = None
@@ -65,7 +66,7 @@ class AlbumCard(QWidget):
                 border-radius: 8px;
                 background-color: transparent;
             }
-            #albumCardFrame:hover {
+            #albumCardFrame:hover, #albumCardFrame[focused="true"] {
                 background-color: var(--surface_hover);
             }
         """, theme))
@@ -123,6 +124,32 @@ class AlbumCard(QWidget):
         # Set fixed size for the whole card to make sure it doesn't scale / squeeze
         self.setFixedSize(158, 220 if is_appears_on else 200)
         
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self.frame.setProperty("focused", True)
+        self.frame.style().unpolish(self.frame)
+        self.frame.style().polish(self.frame)
+        p = self.parent()
+        while p:
+            from PyQt6.QtWidgets import QScrollArea
+            if isinstance(p, QScrollArea):
+                p.ensureWidgetVisible(self)
+                break
+            p = p.parent()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.frame.setProperty("focused", False)
+        self.frame.style().unpolish(self.frame)
+        self.frame.style().polish(self.frame)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self.clicked.emit(self.album_key)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.album_key)
@@ -145,6 +172,14 @@ class AlbumGridWidget(QWidget):
         self._albums = albums
         self._is_appears_on = is_appears_on
         self.rebuild_grid()
+
+    def get_cards(self):
+        cards = []
+        for i in range(self.grid_layout.count()):
+            item = self.grid_layout.itemAt(i)
+            if item and item.widget():
+                cards.append(item.widget())
+        return cards
 
     def rebuild_grid(self, container_width: int = 0):
         # Clear existing layout items
@@ -348,7 +383,7 @@ class ArtistPageView(QWidget):
 
         # --- Animation timer for Equalizer ---
         self.animation_timer = QTimer(self)
-        self.animation_timer.setInterval(120)
+        self.animation_timer.setInterval(50)
         self.animation_timer.timeout.connect(self._on_animation_tick)
 
         if self.engine:
@@ -577,6 +612,21 @@ class ArtistPageView(QWidget):
 
     def refresh_from_signal(self, *args) -> None:
         try:
+            if args and isinstance(args[0], str):
+                track_path = args[0]
+                if not hasattr(self, "store") or not self.store.get_track(track_path):
+                    self.refresh()
+                    return
+                if hasattr(self, "table") and self.table:
+                    model = self.table.model()
+                    if model:
+                        for row in range(model.rowCount()):
+                            track = model.track_at(row)
+                            if track and track.path == track_path:
+                                idx_start = model.index(row, 0)
+                                idx_end = model.index(row, model.columnCount() - 1)
+                                model.dataChanged.emit(idx_start, idx_end, [])
+                return
             self.refresh()
         except RuntimeError:
             pass
@@ -594,3 +644,180 @@ class ArtistPageView(QWidget):
             self.store.track_updated.disconnect(self.refresh_from_signal)
         except (TypeError, RuntimeError):
             pass
+
+    def _ensure_row_visible(self, row: int) -> None:
+        if not self.table or row < 0: return
+        from PyQt6.QtCore import QPoint
+        self.table.setFocus()
+        model = self.table.model()
+        if model and 0 <= row < model.rowCount():
+            self.table.setCurrentIndex(model.index(row, 0))
+            self.table.selectRow(row)
+        header_h = self.table.horizontalHeader().height() or 30
+        row_h = self.table.verticalHeader().defaultSectionSize() or 36
+        try:
+            row_y = self.table.mapTo(self.scroll_content, QPoint(0, header_h + row * row_h)).y()
+            sb = self.scroll.verticalScrollBar()
+            if sb:
+                val = sb.value()
+                view_h = self.scroll.viewport().height()
+                if row_y < val:
+                    sb.setValue(max(0, row_y - 20))
+                elif row_y + row_h > val + view_h:
+                    sb.setValue(row_y + row_h - view_h + 20)
+        except Exception:
+            pass
+
+    def navigate_up(self) -> None:
+        if not self.table: return
+        model = self.table.model()
+        if not model or model.rowCount() == 0: return
+        curr_row = self.table.currentIndex().row()
+        if curr_row <= 0:
+            self._ensure_row_visible(0)
+        else:
+            self._ensure_row_visible(curr_row - 1)
+
+    def navigate_down(self) -> None:
+        if not self.table: return
+        model = self.table.model()
+        if not model or model.rowCount() == 0: return
+        curr_row = self.table.currentIndex().row()
+        if curr_row < 0:
+            self._ensure_row_visible(0)
+        elif curr_row + 1 < model.rowCount():
+            self._ensure_row_visible(curr_row + 1)
+        else:
+            self._ensure_row_visible(model.rowCount() - 1)
+
+    def _get_active_sections(self):
+        sections = []
+        if self.albums_container.isVisible():
+            cards = self.albums_grid.get_cards()
+            if cards:
+                sections.append(("albums", cards))
+        if self.appears_on_container.isVisible():
+            cards = self.appears_on_grid.get_cards()
+            if cards:
+                sections.append(("appears_on", cards))
+        if self.tracks_container.isVisible() and self.model.rowCount() > 0:
+            sections.append(("tracks", self.table))
+        return sections
+
+    def _ensure_card_visible(self, card) -> None:
+        from PyQt6.QtCore import QPoint
+        card.setFocus()
+        card_y = card.mapTo(self.scroll_content, QPoint(0, 0)).y()
+        card_h = card.height()
+        sb = self.scroll.verticalScrollBar()
+        if sb:
+            val = sb.value()
+            view_h = self.scroll.viewport().height()
+            if card_y < val:
+                sb.setValue(max(0, card_y - 20))
+            elif card_y + card_h > val + view_h:
+                sb.setValue(card_y + card_h - view_h + 20)
+
+    def _ensure_row_visible(self, row: int) -> None:
+        from PyQt6.QtCore import QPoint
+        self.table.setFocus()
+        self.table.selectRow(row)
+        header_h = self.table.horizontalHeader().height() or 30
+        row_h = self.table.verticalHeader().defaultSectionSize() or 40
+        row_y = self.table.mapTo(self.scroll_content, QPoint(0, header_h + row * row_h)).y()
+        sb = self.scroll.verticalScrollBar()
+        if sb:
+            val = sb.value()
+            view_h = self.scroll.viewport().height()
+            if row_y < val:
+                sb.setValue(max(0, row_y - 20))
+            elif row_y + row_h > val + view_h:
+                sb.setValue(row_y + row_h - view_h + 20)
+
+    def _get_current_focus_info(self):
+        from PyQt6.QtWidgets import QApplication
+        sections = self._get_active_sections()
+        if not sections: return None, -1, -1
+        
+        focus_w = QApplication.focusWidget()
+        current_section_idx = -1
+        current_card_idx = -1
+
+        for sec_idx, (sec_type, target) in enumerate(sections):
+            if sec_type in ("albums", "appears_on"):
+                if focus_w in target:
+                    current_section_idx = sec_idx
+                    current_card_idx = target.index(focus_w)
+                    break
+            elif sec_type == "tracks":
+                if focus_w == self.table or (self.table and self.table.isAncestorOf(focus_w)):
+                    current_section_idx = sec_idx
+                    break
+                    
+        return sections, current_section_idx, current_card_idx
+
+    def navigate_down(self) -> None:
+        sections, current_section_idx, current_card_idx = self._get_current_focus_info()
+        if not sections: return
+        
+        if current_section_idx == -1:
+            sec_type, target = sections[0]
+            if sec_type in ("albums", "appears_on"):
+                self._ensure_card_visible(target[0])
+            elif sec_type == "tracks":
+                self._ensure_row_visible(0)
+            return
+            
+        sec_type, target = sections[current_section_idx]
+        
+        if sec_type in ("albums", "appears_on"):
+            if current_card_idx + 1 < len(target):
+                self._ensure_card_visible(target[current_card_idx + 1])
+            else:
+                if current_section_idx + 1 < len(sections):
+                    next_type, next_target = sections[current_section_idx + 1]
+                    if next_type in ("albums", "appears_on"):
+                        self._ensure_card_visible(next_target[0])
+                    elif next_type == "tracks":
+                        self._ensure_row_visible(0)
+                        
+        elif sec_type == "tracks":
+            curr_row = self.table.currentIndex().row()
+            if curr_row < 0:
+                curr_row = 0
+            if curr_row + 1 < self.model.rowCount():
+                self._ensure_row_visible(curr_row + 1)
+
+    def navigate_up(self) -> None:
+        sections, current_section_idx, current_card_idx = self._get_current_focus_info()
+        if not sections: return
+        
+        if current_section_idx == -1:
+            sec_type, target = sections[-1]
+            if sec_type in ("albums", "appears_on"):
+                self._ensure_card_visible(target[-1])
+            elif sec_type == "tracks":
+                if self.model.rowCount() > 0:
+                    self._ensure_row_visible(self.model.rowCount() - 1)
+            return
+
+        sec_type, target = sections[current_section_idx]
+        
+        if sec_type in ("albums", "appears_on"):
+            if current_card_idx > 0:
+                self._ensure_card_visible(target[current_card_idx - 1])
+            else:
+                if current_section_idx > 0:
+                    prev_type, prev_target = sections[current_section_idx - 1]
+                    if prev_type in ("albums", "appears_on"):
+                        self._ensure_card_visible(prev_target[-1])
+                        
+        elif sec_type == "tracks":
+            curr_row = self.table.currentIndex().row()
+            if curr_row > 0:
+                self._ensure_row_visible(curr_row - 1)
+            else:
+                if current_section_idx > 0:
+                    prev_type, prev_target = sections[current_section_idx - 1]
+                    if prev_type in ("albums", "appears_on"):
+                        self._ensure_card_visible(prev_target[-1])
