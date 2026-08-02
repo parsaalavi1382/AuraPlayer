@@ -887,7 +887,13 @@ class QueuePanel(QFrame):
 
             }}
 
-            QListWidget::item:hover {{
+            QListWidget::item:hover,
+
+            QListWidget::item:selected:hover,
+
+            QListWidget::item:selected:active:hover,
+
+            QListWidget::item:selected:!active:hover {{
 
                 background-color: {theme_colors.get("surface_hover", "#232731")};
 
