@@ -296,7 +296,6 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
 
         elif col == COL_TITLE:
             title_text = track.title or "Unknown Title"
-            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, rect.width())
 
             font = painter.font()
             if is_current:
@@ -306,6 +305,10 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
                 font.setBold(False)
                 painter.setPen(QColor(theme['text_primary']))
             painter.setFont(font)
+
+            fm = painter.fontMetrics()
+            y_baseline = rect.top() + (rect.height() + fm.ascent() - fm.descent()) // 2
+            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, rect.width())
 
             painter.drawText(rect.left(), y_baseline, elided_title)
 

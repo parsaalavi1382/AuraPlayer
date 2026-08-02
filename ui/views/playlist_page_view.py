@@ -390,7 +390,6 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
             # Draw the track title text on the right of the cover
             title_text = track.title or "Unknown Title"
             text_rect = option.rect.adjusted(cover_size + 18, 0, -6, 0)
-            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, text_rect.width())
 
             font = painter.font()
             if is_current:
@@ -400,6 +399,10 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                 font.setBold(False)
                 painter.setPen(QColor(theme['text_primary']))
             painter.setFont(font)
+
+            fm = painter.fontMetrics()
+            y_baseline = text_rect.top() + (text_rect.height() + fm.ascent() - fm.descent()) // 2
+            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, text_rect.width())
 
             painter.drawText(text_rect.left(), y_baseline, elided_title)
 

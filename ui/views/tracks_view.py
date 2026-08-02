@@ -461,21 +461,20 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 if fg:
                     title_color = fg.color()
                     
-            painter.setPen(title_color)
-            
-            fm = option.fontMetrics
-            y_baseline = text_rect.top() + (text_rect.height() + fm.ascent() - fm.descent()) // 2
-            
             title_text = track.title or "Unknown Title"
-            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, text_rect.width())
-            
+
             font = painter.font()
             if is_current:
                 font.setBold(True)
                 painter.setPen(QColor(theme['accent']))
             else:
                 font.setBold(False)
+                painter.setPen(title_color)
             painter.setFont(font)
+            
+            fm = painter.fontMetrics()
+            y_baseline = text_rect.top() + (text_rect.height() + fm.ascent() - fm.descent()) // 2
+            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, text_rect.width())
             
             painter.drawText(text_rect.left(), y_baseline, elided_title)
             
