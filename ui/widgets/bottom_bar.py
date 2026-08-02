@@ -296,6 +296,7 @@ class BottomBar(QFrame):
         self._queue_active = False
         self._has_custom_art = False
         self._is_default = True
+        self._artist_labels = []
 
     def _icon_btn(self, asset: str, size: int = _ICON_SIZE) -> QPushButton:
         btn = HoverBoldButton()
@@ -533,18 +534,22 @@ class BottomBar(QFrame):
 
     def _populate_artists(self, artists: list[str]) -> None:
         self._clear_artist_layout()
+        self._artist_labels = []
         if not artists:
             return
         for i, artist in enumerate(artists):
             lbl = ClickableLabel(artist, self)
             lbl.setObjectName("bottomBarArtist")
+            lbl.setProperty("raw_text", artist)
             lbl.clicked.connect(lambda a=artist: self.artist_clicked.emit(a))
             self.artist_layout.addWidget(lbl)
+            self._artist_labels.append(lbl)
             
             if i < len(artists) - 1:
                 comma = QLabel(", ", self)
                 comma.setObjectName("bottomBarArtistComma")
                 self.artist_layout.addWidget(comma)
+                self._artist_labels.append(comma)
         self.artist_layout.addStretch()
 
     def set_current_track(self, track: Track | None) -> None:
@@ -552,6 +557,7 @@ class BottomBar(QFrame):
         if track is None:
             self.title_label.setText("No track playing")
             self._clear_artist_layout()
+            self._artist_labels = []
             self._has_custom_art = False
             from ui.svg_icon import get_default_cover
             theme_dict = self._theme if self._theme else {}
@@ -559,9 +565,12 @@ class BottomBar(QFrame):
             self.art_label.setText("")
             self.seek_bar.set_position(0.0, 0.0)
         else:
-            self.title_label.setText(track.title)
             self._populate_artists(track.artists)
             self.art_label.setText("")
+            if hasattr(self, 'left_widget') and self.left_widget.width() > 0:
+                self._update_text_elision(self.left_widget.width())
+            else:
+                self.title_label.setText(track.title)
 
     def set_art(self, pixmap: "QPixmap | None") -> None:
         """Set the album art thumbnail."""
@@ -620,3 +629,67 @@ class BottomBar(QFrame):
         self._devices = list(devices)
         self._current_device = current
         self._is_default = is_default
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        total_w = self.width()
+        
+        # Calculate available width for side widgets
+        # left_margin(16) + spacing(12) + center(400) + spacing(12) + right_margin(16) = 456
+        rem_w = max(0, total_w - 456)
+        side_w = rem_w // 2
+        
+        # Enforce minimum width for the right widget so buttons aren't clipped (requires ~180px)
+        side_w = max(180, side_w)
+        
+        # Force left and right widgets to be exactly the same width so the center widget is perfectly centered
+        self.left_widget.setFixedWidth(side_w)
+        self.right_widget.setFixedWidth(side_w)
+        
+        self._update_text_elision(side_w)
+
+    def _update_text_elision(self, side_w: int) -> None:
+        if not self._current_track:
+            return
+            
+        # left widget has art_label (64 fixed) + spacing (12) = 76 px used.
+        text_w = max(0, side_w - 76)
+        
+        # Elide Title
+        title_fm = self.title_label.fontMetrics()
+        elided_title = title_fm.elidedText(self._current_track.title, Qt.TextElideMode.ElideRight, text_w)
+        self.title_label.setText(elided_title)
+        
+        # Elide Artists (handle multiple labels)
+        current_w = 0
+        stop_showing = False
+        for lbl in getattr(self, "_artist_labels", []):
+            if stop_showing:
+                lbl.hide()
+                continue
+
+            raw_text = lbl.property("raw_text")
+            fm = lbl.fontMetrics()
+            
+            if raw_text is not None:
+                # This is an artist name
+                available = text_w - current_w
+                if available > 0:
+                    elided = fm.elidedText(raw_text, Qt.TextElideMode.ElideRight, available)
+                    lbl.setText(elided)
+                    current_w += fm.horizontalAdvance(elided)
+                    lbl.show()
+                    if elided != raw_text:
+                        stop_showing = True
+                else:
+                    lbl.hide()
+                    stop_showing = True
+            else:
+                # This is a comma
+                comma_w = fm.horizontalAdvance(", ")
+                if current_w + comma_w <= text_w:
+                    lbl.show()
+                    current_w += comma_w
+                else:
+                    lbl.hide()
+                    stop_showing = True
