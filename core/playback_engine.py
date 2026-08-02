@@ -696,26 +696,19 @@ class PlaybackEngine(QObject):
     # ============================================================
     def _set_active_source(self, track_path: Optional[str]) -> None:
         if not track_path:
-            self._active.stop()
             self._active.setSource(QUrl())
             return
-        self._active.stop()
         self._active.setSource(QUrl.fromLocalFile(track_path))
         self._handoff_armed = True
         self._handoff_timer.stop()
 
     def _preload_standby(self) -> None:
-        QTimer.singleShot(150, self._do_preload_standby)
-
-    def _do_preload_standby(self) -> None:
         next_index = self._compute_next_index(self._queue_index)
         if next_index is not None and next_index < len(self._queue):
             next_path = self._queue[next_index]
-            self._standby.stop()
             self._standby.setSource(QUrl.fromLocalFile(next_path))
             self._standby.pause()
         else:
-            self._standby.stop()
             self._standby.setSource(QUrl())
     
     def _play_queue_index(self, index: int) -> None:
