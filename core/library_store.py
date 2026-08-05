@@ -46,6 +46,10 @@ class LibraryStore(QObject):
     # rename/reorder). Argument: playlist id (or "" for a bulk change).
     playlists_changed = pyqtSignal(str)
 
+    # Emitted when an artist's custom profile picture changes.
+    # Argument: artist name.
+    artist_image_changed = pyqtSignal(str)
+
     # Emitted when a scan starts/progresses/finishes, for progress UI.
     scan_progress = pyqtSignal(int, int, str)   # current, total, filename
     scan_finished = pyqtSignal(dict)            # summary dict from scanner
@@ -72,6 +76,9 @@ class LibraryStore(QObject):
 
     def all_playlists(self) -> list[Playlist]:
         return list(self.cache.playlists.values())
+
+    def get_artist_image(self, artist_name: str) -> str | None:
+        return self.cache.artist_images.get(artist_name)
 
     # ---------- Mutators (always go through here, then emit + persist) ----------
 
@@ -370,3 +377,42 @@ class LibraryStore(QObject):
                 pl.track_paths.remove(track_path)
                 self.cache.save()
                 self.playlists_changed.emit("smart_favorites")
+
+    def set_artist_image(self, artist_name: str, cover_path: str | None) -> None:
+        """Update the custom profile image for an artist."""
+        target_dir = get_writable_data_path("artist_covers")
+        
+        if os.path.exists(target_dir):
+            try:
+                import re
+                safe_name = re.sub(r'[\\/*?:"<>|]', "", artist_name)
+                for f in os.listdir(target_dir):
+                    if f.startswith(f"cover_{safe_name}"):
+                        try:
+                            os.remove(os.path.join(target_dir, f))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+                
+        if cover_path is None:
+            self.cache.artist_images.pop(artist_name, None)
+        else:
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+                ext = os.path.splitext(cover_path)[1]
+                import re
+                safe_name = re.sub(r'[\\/*?:"<>|]', "", artist_name)
+                target_filename = f"cover_{safe_name}{ext}"
+                target_path = os.path.join(target_dir, target_filename)
+                
+                if os.path.abspath(cover_path) != os.path.abspath(target_path):
+                    import shutil
+                    shutil.copy2(cover_path, target_path)
+                
+                self.cache.artist_images[artist_name] = target_path
+            except Exception:
+                self.cache.artist_images[artist_name] = cover_path
+                
+        self.cache.save()
+        self.artist_image_changed.emit(artist_name)

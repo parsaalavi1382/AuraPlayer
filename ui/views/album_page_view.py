@@ -65,7 +65,16 @@ class AlbumTracksTableModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return COLUMN_HEADERS[section]
+            base = COLUMN_HEADERS[section]
+            sort_col = getattr(self, '_sort_column', -1)
+            sort_asc = getattr(self, '_sort_ascending', True)
+            arrow = "↑" if sort_asc else "↓"
+            if section == sort_col:
+                return f"{arrow} {base}"
+            # When sorted by Artist (col 2, which is hidden), show it in Title header
+            if section == COL_TITLE and sort_col == COL_ARTISTS:
+                return f"{arrow} Artist"
+            return base
         return None
 
     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
@@ -296,21 +305,33 @@ class AlbumTrackHoverDelegate(QStyledItemDelegate):
 
         elif col == COL_TITLE:
             title_text = track.title or "Unknown Title"
+            artist_text = ", ".join(track.artists) if track.artists else "Unknown Artist"
 
+            row_h = rect.height()
+            title_rect = QRect(rect.left(), rect.top(), rect.width(), int(row_h * 0.54))
+            artist_rect_draw = QRect(rect.left(), rect.top() + int(row_h * 0.52), rect.width(), int(row_h * 0.44))
+
+            # --- Draw title ---
             font = painter.font()
-            if is_current:
-                font.setBold(True)
-                painter.setPen(QColor(theme['accent']))
-            else:
-                font.setBold(False)
-                painter.setPen(QColor(theme['text_primary']))
+            font.setBold(is_current)
             painter.setFont(font)
+            painter.setPen(QColor(theme['accent']) if is_current else QColor(theme['text_primary']))
+            fm_t = painter.fontMetrics()
+            y_title = title_rect.top() + (title_rect.height() + fm_t.ascent() - fm_t.descent()) // 2
+            elided_title = fm_t.elidedText(title_text, Qt.TextElideMode.ElideRight, title_rect.width())
+            painter.drawText(title_rect.left(), y_title, elided_title)
 
-            fm = painter.fontMetrics()
-            y_baseline = rect.top() + (rect.height() + fm.ascent() - fm.descent()) // 2
-            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, rect.width())
-
-            painter.drawText(rect.left(), y_baseline, elided_title)
+            # --- Draw artist sub-line ---
+            font2 = QFont(painter.font())
+            font2.setBold(False)
+            sub_px = max(9, int(option.fontMetrics.height() * 0.82))
+            font2.setPixelSize(sub_px)
+            painter.setFont(font2)
+            painter.setPen(QColor(theme['text_secondary']))
+            fm2 = painter.fontMetrics()
+            y_artist = artist_rect_draw.top() + (artist_rect_draw.height() + fm2.ascent() - fm2.descent()) // 2
+            elided_artist = fm2.elidedText(artist_text, Qt.TextElideMode.ElideRight, artist_rect_draw.width())
+            painter.drawText(artist_rect_draw.left(), y_artist, elided_artist)
 
         elif col == COL_ARTISTS:
             artists_text = ", ".join(track.artists)
@@ -927,14 +948,14 @@ class AlbumPageView(QWidget):
             table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             table.verticalHeader().setVisible(False)
-            table.verticalHeader().setDefaultSectionSize(36)
+            table.verticalHeader().setDefaultSectionSize(50)  # Two-line rows: title + artist
             table.setShowGrid(False)
 
             table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
             table.horizontalHeader().setStretchLastSection(False)
             table.setColumnWidth(COL_TRACK_NO, 40)
-            table.setColumnWidth(COL_TITLE, 250)
-            table.setColumnWidth(COL_ARTISTS, 180)
+            table.setColumnWidth(COL_TITLE, 360)  # Wider: shows title+artist merged
+            table.setColumnHidden(COL_ARTISTS, True)  # Artist shown in merged Title cell
             table.setColumnWidth(COL_GENRE, 120)
             table.setColumnWidth(COL_DURATION, 80)
             table.resize_helper = AdjacentResizeHelper(table.horizontalHeader(), self.store, "album_table")

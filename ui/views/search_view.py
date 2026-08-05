@@ -341,13 +341,18 @@ class TrackRow(BaseSearchRow):
 class ArtistRow(BaseSearchRow):
     double_clicked = pyqtSignal()
 
-    def __init__(self, artist: ArtistGroup, query: str, theme: dict[str, Any], parent=None):
+    def __init__(self, artist: ArtistGroup, query: str, theme: dict[str, Any], cover_pix: QPixmap | None = None, parent=None):
         super().__init__(parent)
         self.artist = artist
-        self.setFixedHeight(40)
+        self.setFixedHeight(54)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 6, 12, 6)
+        layout.setContentsMargins(8, 6, 12, 6)
+        layout.setSpacing(12)
+
+        self.cover_lbl = StaticCoverLabel(size=42, parent=self)
+        self.cover_lbl.set_cover(cover_pix)
+        layout.addWidget(self.cover_lbl)
 
         self.name_lbl = HoverLinkLabel(parent=self)
         self.name_lbl.set_styles(14, theme.get("text_primary", "#FFFFFF"), theme.get("accent", "#61AFEF"))
@@ -609,7 +614,9 @@ class SearchSectionWidget(QFrame):
 
         elif self.category_name == "Artists":
             artist: ArtistGroup = item
-            row = ArtistRow(artist, self.query, theme)
+            from ui.views.artists_view import get_artist_collage
+            cover_pix = get_artist_collage(self.overlay.store, artist.name, 42, theme)
+            row = ArtistRow(artist, self.query, theme, cover_pix)
             row.name_lbl.clicked.connect(lambda a=artist.name: self.overlay.artist_requested.emit(a))
             row.double_clicked.connect(lambda a=artist.name: self.overlay.artist_requested.emit(a))
             row.customContextMenuRequested.connect(lambda pos, r=row, t_list=artist.tracks: self.overlay._show_row_context_menu(r.mapToGlobal(pos), t_list))

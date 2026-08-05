@@ -106,7 +106,7 @@ class GenresView(QWidget):
         self.table.setColumnWidth(1, 100)
         self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader())
         
-        self.delegate = SimpleRowHoverDelegate(self.table)
+        self.delegate = SimpleRowHoverDelegate(self.table, has_avatars=False)
         self.table.setItemDelegate(self.delegate)
         self.table.setMouseTracking(True)
         self.hover_filter = SimpleRowHoverFilter(self.table, self.delegate)

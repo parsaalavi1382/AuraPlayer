@@ -366,6 +366,7 @@ class PlaylistDelegate(QStyledItemDelegate):
         self.store = store
         self.view = view
         self._pixmap_cache: dict[str, QPixmap] = {}
+        self.hovered_row = -1
 
     def clear_cache(self):
         self._pixmap_cache.clear()
@@ -374,7 +375,7 @@ class PlaylistDelegate(QStyledItemDelegate):
         if index.column() != 0:
             opt = QStyleOptionViewItem(option)
             self.initStyleOption(opt, index)
-            if index.row() == getattr(self, 'hovered_row', -1):
+            if index.row() == self.hovered_row:
                 opt.state |= QStyle.StateFlag.State_MouseOver
             else:
                 opt.state &= ~QStyle.StateFlag.State_MouseOver
@@ -385,7 +386,7 @@ class PlaylistDelegate(QStyledItemDelegate):
         self.initStyleOption(opt, index)
         opt.text = ""  # Clear text so PE_PanelItemViewItem doesn't draw default text
 
-        if index.row() == getattr(self, 'hovered_row', -1):
+        if index.row() == self.hovered_row:
             opt.state |= QStyle.StateFlag.State_MouseOver
         else:
             opt.state &= ~QStyle.StateFlag.State_MouseOver
@@ -402,6 +403,7 @@ class PlaylistDelegate(QStyledItemDelegate):
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
         theme_key = self.store.cache.settings.theme
         theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
@@ -431,6 +433,8 @@ class PlaylistDelegate(QStyledItemDelegate):
         painter.save()
         painter.setClipPath(clip_path)
         if cover_pixmap and not cover_pixmap.isNull():
+            # High-quality draw matching artists_view approach
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.drawPixmap(cover_rect, cover_pixmap)
         else:
             from ui.svg_icon import get_default_cover

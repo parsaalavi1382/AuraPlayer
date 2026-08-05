@@ -28,6 +28,7 @@ class LibraryCache:
         self.cache_path = cache_path
         self.tracks: dict[str, Track] = {}        # keyed by file path
         self.playlists: dict[str, Playlist] = {}   # keyed by playlist id
+        self.artist_images: dict[str, str] = {}    # maps artist name -> absolute file path
         self.player_state = PlayerState()
         self.settings = Settings()
 
@@ -58,6 +59,8 @@ class LibraryCache:
         }
         if "player_state" in data:
             self.player_state = PlayerState.from_dict(data["player_state"])
+        if "artist_images" in data:
+            self.artist_images = data["artist_images"]
         if "settings" in data:
             self.settings = Settings.from_dict(data["settings"])
 
@@ -69,6 +72,7 @@ class LibraryCache:
             "version": CACHE_VERSION,
             "tracks": [t.to_dict() for t in self.tracks.values()],
             "playlists": [p.to_dict() for p in self.playlists.values()],
+            "artist_images": self.artist_images,
             "player_state": self.player_state.to_dict(),
             "settings": self.settings.to_dict(),
         }

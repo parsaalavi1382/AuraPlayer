@@ -80,9 +80,12 @@ class TracksTableModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             base_header = COLUMN_HEADERS[section]
+            arrow = "↑" if self._sort_ascending else "↓"
             if section == self._sort_column:
-                arrow = "↑" if self._sort_ascending else "↓"
                 return f"{arrow} {base_header}"
+            # When sorted by Artist (col 1, which is hidden), show it in the Title header
+            if section == COL_TITLE and self._sort_column == COL_ARTISTS:
+                return f"{arrow} Artist"
             return base_header
         return None
 

@@ -101,12 +101,12 @@ class TracksView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40) # Comfortable row height for album art
+        self.table.verticalHeader().setDefaultSectionSize(50) # Two-line rows: title + artist
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.setColumnWidth(COL_TITLE, 250)
-        self.table.setColumnWidth(COL_ARTISTS, 180)
+        self.table.setColumnWidth(COL_TITLE, 400)  # Wider: shows title+artist merged
+        self.table.setColumnHidden(COL_ARTISTS, True)  # Artist shown in merged Title cell
         self.table.setColumnWidth(COL_ALBUM, 180)
         self.table.setColumnWidth(COL_GENRE, 120)
         self.table.setColumnWidth(COL_DURATION, 80)
@@ -450,9 +450,15 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 painter.drawText(play_rect, Qt.AlignmentFlag.AlignCenter, "▶")
                 painter.restore()
                 
-            # Now draw the track title text on the right
-            text_rect = option.rect.adjusted(cover_size + 18, 0, -6, 0)
-            
+            # Now draw the track title + artist name in a two-line layout
+            text_x = cover_size + 18
+            text_rect = option.rect.adjusted(text_x, 0, -6, 0)
+            row_h = text_rect.height()
+
+            # Reserve ~54% for title, 46% for artist sub-line
+            title_rect = QRect(text_rect.left(), text_rect.top(), text_rect.width(), int(row_h * 0.54))
+            artist_rect_draw = QRect(text_rect.left(), text_rect.top() + int(row_h * 0.52), text_rect.width(), int(row_h * 0.44))
+
             if option.state & QStyle.StateFlag.State_Selected:
                 title_color = QColor(theme['text_primary'])
             else:
@@ -460,23 +466,31 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 fg = index.data(Qt.ItemDataRole.ForegroundRole)
                 if fg:
                     title_color = fg.color()
-                    
-            title_text = track.title or "Unknown Title"
 
+            title_text = track.title or "Unknown Title"
+            artist_text = ", ".join(track.artists) if track.artists else "Unknown Artist"
+
+            # --- Draw title ---
             font = painter.font()
-            if is_current:
-                font.setBold(True)
-                painter.setPen(QColor(theme['accent']))
-            else:
-                font.setBold(False)
-                painter.setPen(title_color)
+            font.setBold(is_current)
             painter.setFont(font)
-            
+            painter.setPen(QColor(theme['accent']) if is_current else title_color)
             fm = painter.fontMetrics()
-            y_baseline = text_rect.top() + (text_rect.height() + fm.ascent() - fm.descent()) // 2
-            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, text_rect.width())
-            
-            painter.drawText(text_rect.left(), y_baseline, elided_title)
+            y_title = title_rect.top() + (title_rect.height() + fm.ascent() - fm.descent()) // 2
+            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, title_rect.width())
+            painter.drawText(title_rect.left(), y_title, elided_title)
+
+            # --- Draw artist sub-line ---
+            font2 = QFont(painter.font())
+            font2.setBold(False)
+            sub_px = max(9, int(option.fontMetrics.height() * 0.82))
+            font2.setPixelSize(sub_px)
+            painter.setFont(font2)
+            painter.setPen(QColor(theme['text_secondary']))
+            fm2 = painter.fontMetrics()
+            y_artist = artist_rect_draw.top() + (artist_rect_draw.height() + fm2.ascent() - fm2.descent()) // 2
+            elided_artist = fm2.elidedText(artist_text, Qt.TextElideMode.ElideRight, artist_rect_draw.width())
+            painter.drawText(artist_rect_draw.left(), y_artist, elided_artist)
             
             painter.restore()
             return

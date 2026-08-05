@@ -61,9 +61,12 @@ class PlaylistTracksTableModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             base_header = COLUMN_HEADERS[section]
+            arrow = "↑" if self._sort_ascending else "↓"
             if section == self._sort_column:
-                arrow = "↑" if self._sort_ascending else "↓"
                 return f"{arrow} {base_header}"
+            # When sorted by Artist (col 1, which is hidden), show it in the Title header
+            if section == COL_TITLE and self._sort_column == COL_ARTISTS:
+                return f"{arrow} Artist"
             return base_header
         return None
 
@@ -387,24 +390,37 @@ class PlaylistTrackHoverDelegate(QStyledItemDelegate):
                 painter.drawText(play_rect, Qt.AlignmentFlag.AlignCenter, "▶")
                 painter.restore()
 
-            # Draw the track title text on the right of the cover
+            # Draw title + artist name in a two-line layout
             title_text = track.title or "Unknown Title"
-            text_rect = option.rect.adjusted(cover_size + 18, 0, -6, 0)
+            artist_text = ", ".join(track.artists) if track.artists else "Unknown Artist"
+            text_x = cover_size + 18
+            text_rect = option.rect.adjusted(text_x, 0, -6, 0)
+            row_h = text_rect.height()
 
+            title_rect = QRect(text_rect.left(), text_rect.top(), text_rect.width(), int(row_h * 0.54))
+            artist_rect_draw = QRect(text_rect.left(), text_rect.top() + int(row_h * 0.52), text_rect.width(), int(row_h * 0.44))
+
+            # --- Draw title ---
             font = painter.font()
-            if is_current:
-                font.setBold(True)
-                painter.setPen(QColor(theme['accent']))
-            else:
-                font.setBold(False)
-                painter.setPen(QColor(theme['text_primary']))
+            font.setBold(is_current)
             painter.setFont(font)
-
+            painter.setPen(QColor(theme['accent']) if is_current else QColor(theme['text_primary']))
             fm = painter.fontMetrics()
-            y_baseline = text_rect.top() + (text_rect.height() + fm.ascent() - fm.descent()) // 2
-            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, text_rect.width())
+            y_title = title_rect.top() + (title_rect.height() + fm.ascent() - fm.descent()) // 2
+            elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, title_rect.width())
+            painter.drawText(title_rect.left(), y_title, elided_title)
 
-            painter.drawText(text_rect.left(), y_baseline, elided_title)
+            # --- Draw artist sub-line ---
+            font2 = QFont(painter.font())
+            font2.setBold(False)
+            sub_px = max(9, int(option.fontMetrics.height() * 0.82))
+            font2.setPixelSize(sub_px)
+            painter.setFont(font2)
+            painter.setPen(QColor(theme['text_secondary']))
+            fm2 = painter.fontMetrics()
+            y_artist = artist_rect_draw.top() + (artist_rect_draw.height() + fm2.ascent() - fm2.descent()) // 2
+            elided_artist = fm2.elidedText(artist_text, Qt.TextElideMode.ElideRight, artist_rect_draw.width())
+            painter.drawText(artist_rect_draw.left(), y_artist, elided_artist)
 
         elif col in (COL_ARTISTS, COL_ALBUM, COL_GENRE):
             is_hovered = option.rect.contains(self.mouse_pos)
@@ -1068,13 +1084,13 @@ class PlaylistPageView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.verticalHeader().setDefaultSectionSize(50)  # Two-line rows: title + artist
         self.table.setShowGrid(False)
 
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.setColumnWidth(COL_TITLE, 230)
-        self.table.setColumnWidth(COL_ARTISTS, 170)
+        self.table.setColumnWidth(COL_TITLE, 400)  # Wider: shows title+artist merged
+        self.table.setColumnHidden(COL_ARTISTS, True)  # Artist shown in merged Title cell
         self.table.setColumnWidth(COL_ALBUM, 170)
         self.table.setColumnWidth(COL_GENRE, 110)
         self.table.setColumnWidth(COL_DURATION, 80)

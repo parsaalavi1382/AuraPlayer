@@ -9,9 +9,9 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableView, QHeaderView, QAbstractItemView, QScrollArea, QFrame,
-    QSizePolicy, QGridLayout,
+    QSizePolicy, QGridLayout, QMenu, QFileDialog
 )
-from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QLinearGradient
+from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QLinearGradient, QCursor, QAction
 
 from core.library_store import LibraryStore
 from core.models import Track
@@ -50,6 +50,27 @@ class AlbumCard(QWidget):
                     theme_key = w.store.cache.settings.theme
                     break
         
+        def rebuild_grids_with_current_width(self):
+            # Determine available width for grids
+            width = self.scroll.viewport().width() - 48
+            if width <= 100:
+                width = self.width() - 48
+            if width < 100:
+                width = 300
+            
+            # Safely check if components are initialized before calling their methods
+            if hasattr(self, "albums_grid") and self.albums_grid is not None:
+                self.albums_grid.rebuild_grid(width)
+                
+            if hasattr(self, "appears_on_grid") and self.appears_on_grid is not None:
+                self.appears_on_grid.rebuild_grid(width)
+                
+            if hasattr(self, "resize_table_to_contents"):
+                self.resize_table_to_contents()
+                
+        from PyQt6.QtCore import QSize
+        self.icon_size = QSize(140, 140)
+
         from ui.theme import THEMES, apply_theme_vars, DEFAULT_THEME
         theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
 
@@ -82,18 +103,29 @@ class AlbumCard(QWidget):
         
         pixmap = get_album_art(track_path)
         if pixmap and not pixmap.isNull():
-            scaled = pixmap.scaled(
-                150, 150,
+            # Render at 2x resolution for High-DPI crispness (Supersampling)
+            target_size = 150
+            render_size = target_size * 2
+            
+            scaled_raw = pixmap.scaled(
+                render_size, render_size,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            self.cover_label.setPixmap(scaled)
+            
+            # Scale down to final target size smoothly
+            final_pixmap = scaled_raw.scaled(
+                target_size, target_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.cover_label.setPixmap(final_pixmap)
         else:
             from ui.svg_icon import get_default_cover
             self.cover_label.setText("")
             disc_px = get_default_cover(150, theme, corner_radius=8.0)
             self.cover_label.setPixmap(disc_px)
-            
+        
         layout.addWidget(self.cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
         
         # Album name (No year displayed)
@@ -215,6 +247,70 @@ class AlbumGridWidget(QWidget):
         self.setFixedHeight(total_height)
 
 
+class ArtistHoverableCoverLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.is_hovered = False
+        self.setMouseTracking(True)
+        self.has_custom_image = False
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def enterEvent(self, event):
+        self.is_hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.is_hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        
+        if self.is_hovered:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            
+            rect = self.rect()
+            clip_path = QPainterPath()
+            from PyQt6.QtCore import QRectF
+            clip_path.addEllipse(QRectF(rect))
+            painter.setClipPath(clip_path)
+            
+            # Dark overlay
+            painter.fillRect(rect, QColor(0, 0, 0, 150))
+            
+            # Pencil symbol ✏ center & slightly above center
+            font = QFont("Segoe UI", 26)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.setPen(QColor("#FFFFFF"))
+            
+            pencil_text = "✏"
+            fm = painter.fontMetrics()
+            pencil_w = fm.horizontalAdvance(pencil_text)
+            pencil_h = fm.height()
+            
+            pencil_x = (rect.width() - pencil_w) // 2
+            pencil_y = (rect.height() - pencil_h) // 2 - 12
+            
+            painter.drawText(pencil_x, pencil_y + fm.ascent(), pencil_text)
+            
+            # "Choose Photo" text below pencil
+            text_font = QFont("Segoe UI", 10, QFont.Weight.Medium)
+            painter.setFont(text_font)
+            text_val = "edit photo" if self.has_custom_image else "choose photo"
+            text_fm = painter.fontMetrics()
+            text_w = text_fm.horizontalAdvance(text_val)
+            
+            text_x = (rect.width() - text_w) // 2
+            text_y = pencil_y + fm.height() + 4
+            
+            painter.drawText(text_x, text_y + text_fm.ascent(), text_val)
+            painter.end()
+
+
 class ArtistPageView(QWidget):
     track_double_clicked = pyqtSignal(str)
     album_requested = pyqtSignal(str)
@@ -256,20 +352,28 @@ class ArtistPageView(QWidget):
         # ------------------------------------------------------------------
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        
+        header_layout.setSpacing(24)
+
+        self.cover_label = ArtistHoverableCoverLabel()
+        self.cover_label.setFixedSize(120, 120)
+        self.cover_label.mousePressEvent = self._on_cover_clicked
+        header_layout.addWidget(self.cover_label)
+
         text_layout = QVBoxLayout()
-        text_layout.setSpacing(4)
+        text_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        text_layout.setSpacing(8)
 
         # Artist Name
         self.title_label = QLabel(self.artist_name)
         self.title_label.setObjectName("playerScreenTitle")
         self.title_label.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
         self.title_label.setStyleSheet("color: var(--text_primary);")
+        self.title_label.setWordWrap(True)
         
         # Track Count
         self.stats_label = QLabel()
         self.stats_label.setObjectName("emptyStateSubtitle")
-        self.stats_label.setFont(QFont("Segoe UI", 11))
+        self.stats_label.setFont(QFont("Segoe UI", 12))
         self.stats_label.setStyleSheet("color: var(--text_secondary);")
         
         text_layout.addWidget(self.title_label)
@@ -350,12 +454,12 @@ class ArtistPageView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.verticalHeader().setDefaultSectionSize(50)  # Two-line rows: title + artist
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.setColumnWidth(COL_TITLE, 250)
-        self.table.setColumnWidth(COL_ARTISTS, 180)
+        self.table.setColumnWidth(COL_TITLE, 400)  # Wider: shows title+artist merged
+        self.table.setColumnHidden(COL_ARTISTS, True)  # Artist shown in merged Title cell
         self.table.setColumnWidth(COL_ALBUM, 180)
         self.table.setColumnWidth(COL_GENRE, 120)
         self.table.setColumnWidth(COL_DURATION, 80)
@@ -392,6 +496,34 @@ class ArtistPageView(QWidget):
 
         self.refresh()
         self._update_animation_timer()
+
+    def _on_cover_clicked(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            has_custom = bool(self.store.get_artist_image(self.artist_name))
+            if has_custom:
+                menu = QMenu(self)
+                edit_action = QAction("Edit", self)
+                delete_action = QAction("Delete", self)
+                menu.addAction(edit_action)
+                menu.addAction(delete_action)
+                
+                action = menu.exec(event.globalPosition().toPoint())
+                if action == edit_action:
+                    self._prompt_cover_file()
+                elif action == delete_action:
+                    self.store.set_artist_image(self.artist_name, None)
+                    self.refresh()
+            else:
+                self._prompt_cover_file()
+
+    def _prompt_cover_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Artist Profile Picture", "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp)"
+        )
+        if path:
+            self.store.set_artist_image(self.artist_name, path)
+            self.refresh()
 
     def _on_playback_changed(self, *args) -> None:
         self.table.viewport().update()
@@ -432,17 +564,31 @@ class ArtistPageView(QWidget):
         if width < 100:
             width = 300
         
-        self.albums_grid.rebuild_grid(width)
-        self.appears_on_grid.rebuild_grid(width)
-        self.resize_table_to_contents()
+        # Safely check if components are initialized before calling their methods
+        if hasattr(self, "albums_grid") and self.albums_grid is not None:
+            self.albums_grid.rebuild_grid(width)
+            
+        if hasattr(self, "appears_on_grid") and self.appears_on_grid is not None:
+            self.appears_on_grid.rebuild_grid(width)
+            
+        if hasattr(self, "resize_table_to_contents"):
+            self.resize_table_to_contents()
 
     def resize_table_to_contents(self) -> None:
+        # Safely return if the model or table hasn't been fully initialized yet
+        if not hasattr(self, "model") or self.model is None:
+            return
+        if not hasattr(self, "table") or self.table is None:
+            return
+
         num_rows = self.model.rowCount()
         row_height = self.table.verticalHeader().defaultSectionSize() or 40
         header_height = self.table.horizontalHeader().height() or 30
+        
         if num_rows == 0:
             self.table.setFixedHeight(0)
             return
+            
         total_height = num_rows * row_height + header_height + 4
         self.table.setFixedHeight(total_height)
 
@@ -460,6 +606,14 @@ class ArtistPageView(QWidget):
     def refresh(self) -> None:
         self.apply_theme_colors()
         all_tracks = self.store.all_tracks()
+        
+        theme_key = self.store.cache.settings.theme
+        from ui.theme import THEMES, DEFAULT_THEME
+        theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        from ui.views.artists_view import get_artist_collage
+        cover_px = get_artist_collage(self.store, self.artist_name, 120, theme)
+        self.cover_label.setPixmap(cover_px)
+        self.cover_label.has_custom_image = bool(self.store.get_artist_image(self.artist_name))
         
         # Filter tracks where this artist is listed in artists
         artist_tracks = [t for t in all_tracks if self.artist_name in t.artists]

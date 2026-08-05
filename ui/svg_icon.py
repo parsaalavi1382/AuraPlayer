@@ -364,3 +364,43 @@ def get_default_cover(size: int, theme: dict, corner_radius: float = 4.0) -> QPi
     painter.end()
     _CACHE[cache_key] = pixmap
     return pixmap
+
+
+def get_default_artist_cover(size: int, theme: dict, corner_radius: float = None) -> QPixmap:
+    """
+    Returns a beautiful, theme-adaptive default artist profile QPixmap
+    with a solid background and a centered user icon.
+    """
+    bg_color_str = theme.get("surface", "#1C1F26")
+    icon_color_str = theme.get("text_secondary", "#9AA0AC")
+    
+    if corner_radius is None:
+        corner_radius = size / 2.0  # Perfect circle by default
+        
+    cache_key = ("default_artist_cover_gen", bg_color_str, icon_color_str, size, int(corner_radius))
+    if cache_key in _CACHE:
+        return _CACHE[cache_key]
+    
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    
+    # Draw rounded background (circle if corner_radius == size/2)
+    painter.setBrush(QColor(bg_color_str))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawRoundedRect(QRectF(0, 0, size, size), corner_radius, corner_radius)
+    
+    # Render the user icon centered inside
+    icon_size = int(size * 0.55)
+    icon_size = max(16, min(icon_size, size - 4))
+    
+    icon_px = svg_pixmap("user", icon_color_str, icon_size)
+    if icon_px and not icon_px.isNull():
+        offset = (size - icon_size) / 2.0
+        painter.drawPixmap(QRectF(offset, offset, icon_size, icon_size), icon_px, QRectF(icon_px.rect()))
+        
+    painter.end()
+    _CACHE[cache_key] = pixmap
+    return pixmap
