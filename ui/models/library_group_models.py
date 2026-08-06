@@ -122,6 +122,8 @@ class AlbumsListModel(QAbstractListModel):
 
     def sort_by_column(self, column: int, ascending: bool = True) -> None:
         self.layoutAboutToBeChanged.emit()
+        self._sort_column = column
+        self._sort_ascending = ascending
         if column == 0:
             self._albums.sort(key=lambda a: (a.album_name or "").lower(), reverse=not ascending)
         elif column == 1:
@@ -136,6 +138,27 @@ class AlbumsListModel(QAbstractListModel):
         elif column == 3:
             self._albums.sort(key=lambda a: a.total_duration, reverse=not ascending)
         self.layoutChanged.emit()
+
+    def cycle_sort(self, column: int) -> None:
+        if column == 0:
+            if getattr(self, '_sort_column', -1) == 0:
+                if getattr(self, '_sort_ascending', True):
+                    self.sort_by_column(0, False)
+                else:
+                    self.sort_by_column(1, True)
+            elif getattr(self, '_sort_column', -1) == 1:
+                if getattr(self, '_sort_ascending', True):
+                    self.sort_by_column(1, False)
+                else:
+                    self.sort_by_column(0, True)
+            else:
+                self.sort_by_column(0, True)
+        else:
+            if getattr(self, '_sort_column', -1) == column:
+                new_asc = not getattr(self, '_sort_ascending', True)
+            else:
+                new_asc = True
+            self.sort_by_column(column, new_asc)
 
 
 class ArtistsListModel(QAbstractListModel):

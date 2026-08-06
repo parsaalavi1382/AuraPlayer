@@ -5,8 +5,8 @@ Clicking an artist navigates to that Artist Page (built in Step 5).
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QObject, QEvent, QSize
-from PyQt6.QtGui import QCursor, QIcon
+from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QObject, QEvent, QSize, QRectF
+from PyQt6.QtGui import QCursor, QIcon, QColor, QPixmap, QPainter, QPainterPath
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTableView, QStackedWidget, QHeaderView, QAbstractItemView,
     QStyledItemDelegate, QStyleOptionViewItem, QStyle
@@ -16,8 +16,6 @@ from core.library_store import LibraryStore
 from ui.models.library_group_models import ArtistsListModel
 from ui.widgets.empty_state import EmptyStateWidget
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QRectF
-from PyQt6.QtGui import QPixmap, QPainter, QPainterPath
 
 
 def get_artist_collage(store: LibraryStore, artist_name: str, target_size: int = 160, theme: dict = None) -> QPixmap:
@@ -183,12 +181,15 @@ class _ArtistsTableModel(QAbstractTableModel):
         self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, 1)
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
-        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            base_header = ["Artist Name", "Tracks"][section]
-            if section == self._sort_column:
-                arrow = "↑" if self._sort_ascending else "↓"
-                return f"{arrow} {base_header}"
-            return base_header
+        if orientation == Qt.Orientation.Horizontal:
+            if role == Qt.ItemDataRole.DisplayRole:
+                base_header = ["Artist Name", "Tracks"][section]
+                if section == self._sort_column:
+                    arrow = "↑" if self._sort_ascending else "↓"
+                    return f"{arrow} {base_header}"
+                return base_header
+            elif role == Qt.ItemDataRole.TextAlignmentRole:
+                return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         return None
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -199,6 +200,9 @@ class _ArtistsTableModel(QAbstractTableModel):
             return None
         if role == Qt.ItemDataRole.DisplayRole:
             return artist.name if index.column() == 0 else str(artist.track_count)
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            if index.column() == 1:
+                return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         if role == Qt.ItemDataRole.UserRole + 1 and index.column() == 0:
             store = self.view.store
             theme_key = store.cache.settings.theme
@@ -246,12 +250,12 @@ class ArtistsView(QWidget):
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.setColumnWidth(0, 450)
         self.table.setColumnWidth(1, 100)
-        self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader())
+        self.resize_helper = AdjacentResizeHelper(self.table.horizontalHeader(), self.store, "artists_table")
         
         self.delegate = SimpleRowHoverDelegate(self.table)
         self.table.setItemDelegate(self.delegate)
         self.table.setMouseTracking(True)
-        self.hover_filter = SimpleRowHoverFilter(self.table, self.delegate)
+        self.hover_filter = SimpleRowHoverFilter(self.table, self.delegate, self)
         self.table.viewport().installEventFilter(self.hover_filter)
         
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
@@ -298,6 +302,12 @@ class SimpleRowHoverDelegate(QStyledItemDelegate):
         self.hovered_row = -1
         self.has_avatars = has_avatars
 
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        if self.has_avatars and index.column() == 0:
+            option.text = ""
+            option.features &= ~QStyleOptionViewItem.ViewItemFeature.HasDisplay
+
     def paint(self, painter, option, index):
         from PyQt6.QtCore import QRectF
         from PyQt6.QtGui import QPainterPath
@@ -310,41 +320,61 @@ class SimpleRowHoverDelegate(QStyledItemDelegate):
             opt.state &= ~QStyle.StateFlag.State_MouseOver
 
         if self.has_avatars:
-            # Fetch our manually-supplied pixmap (custom role) before super() draws
-            cover_pix = index.data(Qt.ItemDataRole.UserRole + 1) if index.column() == 0 else None
+            if index.column() == 0:
+                # 1. Draw cell background & bottom border line across full rect
+                opt_bg = QStyleOptionViewItem(opt)
+                opt_bg.decorationSize = QSize(0, 0)
+                opt_bg.icon = QIcon()
+                super().paint(painter, opt_bg, index)
 
-            # Let Qt draw background, hover highlight, and text — but without any decoration
-            opt.decorationSize = QSize(0, 0)
-            opt.icon = QIcon()
-            # Shift text rect right to leave room for the avatar
-            ICON_AREA = 48  # 40px icon + 8px gap
-            opt.rect.setLeft(opt.rect.left() + ICON_AREA)
-            super().paint(painter, opt, index)
-            opt.rect.setLeft(opt.rect.left() - ICON_AREA)  # restore (defensive)
+                # 2. Draw artist name shifted by ICON_AREA (48px)
+                artist_name = index.data(Qt.ItemDataRole.DisplayRole) or ""
+                if artist_name:
+                    ICON_AREA = 48  # 40px icon + 8px gap
+                    text_rect = option.rect.adjusted(ICON_AREA, 0, -6, 0)
+                    fm = option.fontMetrics
+                    y_baseline = text_rect.top() + (text_rect.height() + fm.ascent() - fm.descent()) // 2
+                    elided_name = fm.elidedText(artist_name, Qt.TextElideMode.ElideRight, text_rect.width())
+                    
+                    theme_key = "dark"
+                    if hasattr(self.parent(), "store") and hasattr(self.parent().store, "cache"):
+                        theme_key = self.parent().store.cache.settings.theme
+                    from ui.theme import THEMES, DEFAULT_THEME
+                    theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+                    
+                    painter.save()
+                    painter.setPen(QColor(theme['text_primary']))
+                    painter.setFont(option.font)
+                    painter.drawText(text_rect.left(), y_baseline, elided_name)
+                    painter.restore()
 
-            # Now draw the circular avatar ourselves with full quality
-            if cover_pix and not cover_pix.isNull() and index.column() == 0:
-                AVATAR_SIZE = 36
-                x = option.rect.left() + 5
-                y = option.rect.top() + (option.rect.height() - AVATAR_SIZE) // 2
-                painter.save()
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-                clip = QPainterPath()
-                clip.addEllipse(QRectF(x, y, AVATAR_SIZE, AVATAR_SIZE))
-                painter.setClipPath(clip)
-                painter.drawPixmap(x, y, AVATAR_SIZE, AVATAR_SIZE, cover_pix)
-                painter.restore()
+                # 3. Draw circular avatar
+                cover_pix = index.data(Qt.ItemDataRole.UserRole + 1)
+                if cover_pix and not cover_pix.isNull():
+                    AVATAR_SIZE = 36
+                    x = option.rect.left() + 5
+                    y = option.rect.top() + (option.rect.height() - AVATAR_SIZE) // 2
+                    painter.save()
+                    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+                    clip = QPainterPath()
+                    clip.addEllipse(QRectF(x, y, AVATAR_SIZE, AVATAR_SIZE))
+                    painter.setClipPath(clip)
+                    painter.drawPixmap(x, y, AVATAR_SIZE, AVATAR_SIZE, cover_pix)
+                    painter.restore()
+            else:
+                super().paint(painter, opt, index)
         else:
             # No avatars — just draw normally (no text shift)
             super().paint(painter, opt, index)
 
 
 class SimpleRowHoverFilter(QObject):
-    def __init__(self, table, delegate):
+    def __init__(self, table, delegate, view=None):
         super().__init__(table)
         self.table = table
         self.delegate = delegate
+        self.view = view
         self.table.verticalScrollBar().valueChanged.connect(self._on_scroll)
         
     def _on_scroll(self):
@@ -360,10 +390,9 @@ class SimpleRowHoverFilter(QObject):
         index = self.table.indexAt(pos)
         if index.isValid():
             self.delegate.hovered_row = index.row()
-            self.table.setCursor(Qt.CursorShape.ArrowCursor)
         else:
             self.delegate.hovered_row = -1
-            self.table.setCursor(Qt.CursorShape.ArrowCursor)
+        self.table.setCursor(Qt.CursorShape.ArrowCursor)
         if self.table and self.table.viewport():
             self.table.viewport().update()
 
@@ -381,5 +410,6 @@ class SimpleRowHoverFilter(QObject):
             self.delegate.hovered_row = -1
             if self.table and self.table.viewport():
                 self.table.viewport().update()
+                self.table.setCursor(Qt.CursorShape.ArrowCursor)
                 
         return super().eventFilter(obj, event)

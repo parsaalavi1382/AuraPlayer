@@ -541,11 +541,7 @@ class ArtistPageView(QWidget):
                 self.animation_timer.stop()
 
     def _on_header_clicked(self, index: int) -> None:
-        if self.model._sort_column == index:
-            new_asc = not self.model._sort_ascending
-        else:
-            new_asc = True
-        self.model.sort_alphabetical(index, new_asc)
+        self.model.cycle_sort(index)
         self.model.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, self.model.columnCount() - 1)
 
     def resizeEvent(self, event):

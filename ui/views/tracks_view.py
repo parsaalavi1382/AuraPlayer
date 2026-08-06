@@ -196,11 +196,7 @@ class TracksView(QWidget):
         self.refresh()
 
     def _on_header_clicked(self, index: int) -> None:
-        if self.model._sort_column == index:
-            new_asc = not self.model._sort_ascending
-        else:
-            new_asc = True
-        self.model.sort_alphabetical(index, new_asc)
+        self.model.cycle_sort(index)
         self.model.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, self.model.columnCount() - 1)
 
     # ---------- Interactions ----------
@@ -306,7 +302,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
         rect = self.table.visualRect(index)
         if not rect.contains(pos):
             return False
-        cover_size = 28
+        cover_size = 45
         cover_x = rect.left() + 10
         cover_y = rect.top() + (rect.height() - cover_size) // 2
         cover_rect = QRect(cover_x, cover_y, cover_size, cover_size)
@@ -352,7 +348,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
             painter.save()
             
             # Dimensions
-            cover_size = 28
+            cover_size = 36
             cover_x = option.rect.left() + 10
             cover_y = option.rect.top() + (option.rect.height() - cover_size) // 2
             cover_rect = QRect(cover_x, cover_y, cover_size, cover_size)
@@ -362,8 +358,9 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 from core.metadata_reader import get_album_art
                 raw_pixmap = get_album_art(track.path)
                 if raw_pixmap and not raw_pixmap.isNull():
+                    render_size = cover_size * 2
                     scaled = raw_pixmap.scaled(
-                        cover_size, cover_size,
+                        render_size, render_size,
                         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                         Qt.TransformationMode.SmoothTransformation,
                     )
@@ -387,11 +384,12 @@ class TrackHoverDelegate(QStyledItemDelegate):
             text_color = QColor(theme['text_secondary'])
             
             # Draw album cover/placeholder
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             clip_path = QPainterPath()
             clip_path.addRoundedRect(QRectF(cover_rect), 4.0, 4.0)
             
             painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.setClipPath(clip_path)
             if pixmap:
                 painter.drawPixmap(cover_rect, pixmap)
@@ -414,8 +412,8 @@ class TrackHoverDelegate(QStyledItemDelegate):
             # Equalizer or Play icon overlay
             if is_playing:
                 # Equalizer animation (State A)
-                max_bar_h = 12
-                bar_w = 3
+                max_bar_h = 16
+                bar_w = 4
                 spacing = 2
                 eq_x = cover_rect.left() + (cover_size - (3 * bar_w + 2 * spacing)) // 2
                 eq_y = cover_rect.top() + (cover_size - max_bar_h) // 2
@@ -442,7 +440,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
                 font = QFont()
-                font.setPointSize(9)
+                font.setPointSize(11)
                 font.setBold(True)
                 painter.setFont(font)
                 painter.setPen(QColor("#FFFFFF"))
@@ -451,13 +449,11 @@ class TrackHoverDelegate(QStyledItemDelegate):
                 painter.restore()
                 
             # Now draw the track title + artist name in a two-line layout
-            text_x = cover_size + 18
+            text_x = cover_size + 20
             text_rect = option.rect.adjusted(text_x, 0, -6, 0)
-            row_h = text_rect.height()
 
-            # Reserve ~54% for title, 46% for artist sub-line
-            title_rect = QRect(text_rect.left(), text_rect.top(), text_rect.width(), int(row_h * 0.54))
-            artist_rect_draw = QRect(text_rect.left(), text_rect.top() + int(row_h * 0.52), text_rect.width(), int(row_h * 0.44))
+            title_rect = QRect(text_rect.left(), text_rect.top(), text_rect.width(), 22)
+            artist_rect_draw = QRect(text_rect.left(), text_rect.top() + 24, text_rect.width(), 22)
 
             if option.state & QStyle.StateFlag.State_Selected:
                 title_color = QColor(theme['text_primary'])
@@ -468,7 +464,6 @@ class TrackHoverDelegate(QStyledItemDelegate):
                     title_color = fg.color()
 
             title_text = track.title or "Unknown Title"
-            artist_text = ", ".join(track.artists) if track.artists else "Unknown Artist"
 
             # --- Draw title ---
             font = painter.font()
@@ -476,7 +471,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
             painter.setFont(font)
             painter.setPen(QColor(theme['accent']) if is_current else title_color)
             fm = painter.fontMetrics()
-            y_title = title_rect.top() + (title_rect.height() + fm.ascent() - fm.descent()) // 2
+            y_title = option.rect.top() + 18
             elided_title = fm.elidedText(title_text, Qt.TextElideMode.ElideRight, title_rect.width())
             painter.drawText(title_rect.left(), y_title, elided_title)
 
@@ -486,11 +481,70 @@ class TrackHoverDelegate(QStyledItemDelegate):
             sub_px = max(9, int(option.fontMetrics.height() * 0.82))
             font2.setPixelSize(sub_px)
             painter.setFont(font2)
-            painter.setPen(QColor(theme['text_secondary']))
             fm2 = painter.fontMetrics()
-            y_artist = artist_rect_draw.top() + (artist_rect_draw.height() + fm2.ascent() - fm2.descent()) // 2
-            elided_artist = fm2.elidedText(artist_text, Qt.TextElideMode.ElideRight, artist_rect_draw.width())
-            painter.drawText(artist_rect_draw.left(), y_artist, elided_artist)
+            y_artist = option.rect.top() + 37
+            
+            artists = track.artists if track.artists else ["Unknown Artist"]
+            x_offset = artist_rect_draw.left()
+            max_x = artist_rect_draw.right()
+            ellipsis = "..."
+            ellipsis_width = fm2.horizontalAdvance(ellipsis)
+            
+            for i, artist in enumerate(artists):
+                artist_width = fm2.horizontalAdvance(artist)
+                next_delim = ", " if i < len(artists) - 1 else ""
+                delim_width = fm2.horizontalAdvance(next_delim) if next_delim else 0
+                
+                if x_offset + artist_width + delim_width > max_x:
+                    available_w = max_x - x_offset - ellipsis_width
+                    if available_w > 10:
+                        elided_artist = fm2.elidedText(artist, Qt.TextElideMode.ElideRight, available_w)
+                        elided_width = fm2.horizontalAdvance(elided_artist)
+                        
+                        artist_rect = QRect(x_offset, artist_rect_draw.top(), elided_width, artist_rect_draw.height())
+                        artist_hovered = is_row_hovered and artist_rect.contains(self.mouse_pos)
+                        
+                        font_draw = QFont(font2)
+                        font_draw.setUnderline(artist_hovered)
+                        painter.setFont(font_draw)
+                        
+                        if artist_hovered:
+                            painter.setPen(QColor(theme['accent']))
+                        elif option.state & QStyle.StateFlag.State_Selected:
+                            painter.setPen(QColor(theme['text_primary']))
+                        else:
+                            painter.setPen(QColor(theme['text_secondary']))
+                            
+                        painter.drawText(x_offset, y_artist, elided_artist)
+                    else:
+                        if x_offset + ellipsis_width <= max_x + 5:
+                            painter.setFont(font2)
+                            painter.setPen(QColor(theme['text_secondary']))
+                            painter.drawText(x_offset, y_artist, ellipsis)
+                    break
+                else:
+                    artist_rect = QRect(x_offset, artist_rect_draw.top(), artist_width, artist_rect_draw.height())
+                    artist_hovered = is_row_hovered and artist_rect.contains(self.mouse_pos)
+                    
+                    font_draw = QFont(font2)
+                    font_draw.setUnderline(artist_hovered)
+                    painter.setFont(font_draw)
+                    
+                    if artist_hovered:
+                        painter.setPen(QColor(theme['accent']))
+                    elif option.state & QStyle.StateFlag.State_Selected:
+                        painter.setPen(QColor(theme['text_primary']))
+                    else:
+                        painter.setPen(QColor(theme['text_secondary']))
+                    
+                    painter.drawText(x_offset, y_artist, artist)
+                    x_offset += artist_width
+                    
+                    if next_delim:
+                        painter.setFont(font2)
+                        painter.setPen(QColor(theme['text_secondary']))
+                        painter.drawText(x_offset, y_artist, next_delim)
+                        x_offset += delim_width
             
             painter.restore()
             return
@@ -688,7 +742,7 @@ class TrackHoverDelegate(QStyledItemDelegate):
 
     def is_over_clickable_text(self, index, pos) -> bool:
         col = index.column()
-        if col == COL_ARTISTS:
+        if col in (COL_ARTISTS, COL_TITLE):
             return self.get_artist_at_pos(index, pos) is not None
         elif col == COL_GENRE:
             return self.get_genre_at_pos(index, pos) is not None
@@ -711,14 +765,66 @@ class TrackHoverDelegate(QStyledItemDelegate):
 
     def get_artist_at_pos(self, index, pos) -> str | None:
         col = index.column()
-        if col != COL_ARTISTS:
+        if col not in (COL_ARTISTS, COL_TITLE):
             return None
             
-        rect = self.table.visualRect(index).adjusted(6, 0, -6, 0)
+        rect = self.table.visualRect(index)
         if not rect.contains(pos):
             return None
             
         fm = self.table.fontMetrics()
+        
+        if col == COL_TITLE:
+            cover_size = 40
+            text_x = rect.left() + 10 + cover_size + 10
+            text_w = rect.width() - (10 + cover_size + 10) - 6
+            artist_rect_draw = QRect(text_x, rect.top() + 24, text_w, 22)
+            
+            if not artist_rect_draw.contains(pos):
+                return None
+            
+            track = index.data(Qt.ItemDataRole.UserRole)
+            if not track or not track.artists:
+                return None
+            
+            # Recreate font2 to get accurate fm2
+            font2 = QFont(self.table.font())
+            font2.setBold(False)
+            sub_px = max(9, int(fm.height() * 0.82))
+            font2.setPixelSize(sub_px)
+            from PyQt6.QtGui import QFontMetrics
+            fm2 = QFontMetrics(font2)
+            
+            artists = track.artists
+            x_offset = artist_rect_draw.left()
+            max_x = artist_rect_draw.right()
+            ellipsis_width = fm2.horizontalAdvance("...")
+            
+            for i, artist in enumerate(artists):
+                artist_width = fm2.horizontalAdvance(artist)
+                next_delim = ", " if i < len(artists) - 1 else ""
+                delim_width = fm2.horizontalAdvance(next_delim) if next_delim else 0
+                
+                if x_offset + artist_width + delim_width > max_x:
+                    available_w = max_x - x_offset - ellipsis_width
+                    if available_w > 10:
+                        elided_artist = fm2.elidedText(artist, Qt.TextElideMode.ElideRight, available_w)
+                        elided_width = fm2.horizontalAdvance(elided_artist)
+                        r = QRect(x_offset, artist_rect_draw.top(), elided_width, artist_rect_draw.height())
+                        if r.contains(pos):
+                            return artist
+                    break
+                else:
+                    r = QRect(x_offset, artist_rect_draw.top(), artist_width, artist_rect_draw.height())
+                    if r.contains(pos):
+                        return artist
+                    x_offset += artist_width + delim_width
+            return None
+
+        # For COL_ARTISTS fallback (if used somewhere else)
+        if not rect.contains(pos):
+            return None
+            
         max_x = rect.right()
         ellipsis_width = fm.horizontalAdvance("...")
         
@@ -820,8 +926,13 @@ class HoverEventFilter(QObject):
                     self.table.setCursor(Qt.CursorShape.PointingHandCursor)
                 else:
                     self.table.setCursor(Qt.CursorShape.ArrowCursor)
-            elif col == COL_TITLE and hasattr(self.delegate, "is_over_album_cover") and self.delegate.is_over_album_cover(index, pos):
-                self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+            elif col == COL_TITLE:
+                if self.delegate.is_over_clickable_text(index, pos):
+                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                elif hasattr(self.delegate, "is_over_album_cover") and self.delegate.is_over_album_cover(index, pos):
+                    self.table.setCursor(Qt.CursorShape.PointingHandCursor)
+                else:
+                    self.table.setCursor(Qt.CursorShape.ArrowCursor)
             else:
                 self.table.setCursor(Qt.CursorShape.ArrowCursor)
         else:
@@ -853,10 +964,15 @@ class HoverEventFilter(QObject):
                 index = self.table.indexAt(pos)
                 if index.isValid():
                     col = index.column()
-                    if col == COL_TITLE and hasattr(self.delegate, "is_over_album_cover") and self.delegate.is_over_album_cover(index, pos):
-                        if hasattr(self.view, "_on_row_double_clicked"):
-                            self.view._on_row_double_clicked(index)
+                    if col == COL_TITLE:
+                        clicked_artist = self.delegate.get_artist_at_pos(index, pos)
+                        if clicked_artist:
+                            self.view.artist_requested.emit(clicked_artist)
                             return True
+                        elif hasattr(self.delegate, "is_over_album_cover") and self.delegate.is_over_album_cover(index, pos):
+                            if hasattr(self.view, "_on_row_double_clicked"):
+                                self.view._on_row_double_clicked(index)
+                                return True
                     elif col == COL_ARTISTS:
                         clicked_artist = self.delegate.get_artist_at_pos(index, pos)
                         if clicked_artist:

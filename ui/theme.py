@@ -194,6 +194,10 @@ def build_stylesheet(theme_name: str = DEFAULT_THEME) -> str:
             text-transform: uppercase;
         }}
 
+        QHeaderView::section:last, QHeaderView::section:only-one {{
+            border-right: none;
+        }}
+
         QPushButton {{
             background-color: {c['surface']};
             color: {c['text_primary']};

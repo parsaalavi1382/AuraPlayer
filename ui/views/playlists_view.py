@@ -371,6 +371,12 @@ class PlaylistDelegate(QStyledItemDelegate):
     def clear_cache(self):
         self._pixmap_cache.clear()
 
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        if index.column() == 0:
+            option.text = ""
+            option.features &= ~QStyleOptionViewItem.ViewItemFeature.HasDisplay
+
     def paint(self, painter, option, index):
         if index.column() != 0:
             opt = QStyleOptionViewItem(option)
@@ -384,7 +390,6 @@ class PlaylistDelegate(QStyledItemDelegate):
 
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
-        opt.text = ""  # Clear text so PE_PanelItemViewItem doesn't draw default text
 
         if index.row() == self.hovered_row:
             opt.state |= QStyle.StateFlag.State_MouseOver
@@ -402,38 +407,35 @@ class PlaylistDelegate(QStyledItemDelegate):
             return
 
         painter.save()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
         theme_key = self.store.cache.settings.theme
         theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
 
         fm = option.fontMetrics
-        y_baseline = option.rect.top() + (option.rect.height() + fm.ascent() - fm.descent()) // 2
         text_color = QColor(theme['text_primary'])
 
-        # Dimensions matching TracksView (28x28 cover with 10px left margin)
-        cover_size = 28
+        cover_size = 38
         cover_x = option.rect.left() + 10
         cover_y = option.rect.top() + (option.rect.height() - cover_size) // 2
         cover_rect = QRect(cover_x, cover_y, cover_size, cover_size)
 
-        # Retrieve or compute cached cover
+        # Retrieve or compute cached cover (2x supersampled for crispness)
         cache_key = f"{pl_obj.id}_{theme_key}_{cover_size}"
         if cache_key in self._pixmap_cache:
             cover_pixmap = self._pixmap_cache[cache_key]
         else:
-            cover_pixmap = get_playlist_collage(self.store, pl_obj.id, size=cover_size, theme=theme)
+            cover_pixmap = get_playlist_collage(self.store, pl_obj.id, size=cover_size * 2, theme=theme)
             self._pixmap_cache[cache_key] = cover_pixmap
 
-        # Draw album cover/placeholder clipped to rounded rect (4px radius like TracksView)
+        # Draw rounded square cover (4px radius)
         clip_path = QPainterPath()
         clip_path.addRoundedRect(QRectF(cover_rect), 4.0, 4.0)
 
         painter.save()
         painter.setClipPath(clip_path)
         if cover_pixmap and not cover_pixmap.isNull():
-            # High-quality draw matching artists_view approach
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
             painter.drawPixmap(cover_rect, cover_pixmap)
         else:
@@ -446,7 +448,7 @@ class PlaylistDelegate(QStyledItemDelegate):
         painter.restore()
 
         # Draw playlist name text on the right of the cover art
-        text_rect_left = cover_x + cover_size + 10
+        text_rect_left = cover_x + cover_size + 12
         playlist_name_text = pl_obj.name or "Untitled Playlist"
 
         font = QFont(option.font)
@@ -703,7 +705,7 @@ class PlaylistsView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.verticalHeader().setDefaultSectionSize(50)
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)

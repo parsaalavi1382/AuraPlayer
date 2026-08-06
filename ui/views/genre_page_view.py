@@ -79,12 +79,12 @@ class GenrePageView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.verticalHeader().setDefaultSectionSize(50)  # Two-line rows: title + artist
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.setColumnWidth(COL_TITLE, 250)
-        self.table.setColumnWidth(COL_ARTISTS, 180)
+        self.table.setColumnWidth(COL_TITLE, 400)
+        self.table.setColumnHidden(COL_ARTISTS, True)
         self.table.setColumnWidth(COL_ALBUM, 180)
         self.table.setColumnWidth(COL_GENRE, 120)
         self.table.setColumnWidth(COL_DURATION, 80)
@@ -251,7 +251,8 @@ class GenrePageView(QWidget):
         )
 
     def _on_header_clicked(self, index: int) -> None:
-        self.model.sort_alphabetical(index)
+        self.model.cycle_sort(index)
+        self.model.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, self.model.columnCount() - 1)
 
     def _play_genre_tracks(self, shuffle: bool) -> None:
         ordered_tracks = [

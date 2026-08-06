@@ -191,3 +191,24 @@ class TracksTableModel(QAbstractTableModel):
         }[column]
         self._tracks.sort(key=key_fn, reverse=not ascending)
         self.layoutChanged.emit()
+
+    def cycle_sort(self, column: int) -> None:
+        if column == COL_TITLE:
+            if self._sort_column == COL_TITLE:
+                if self._sort_ascending:
+                    self.sort_alphabetical(COL_TITLE, False)
+                else:
+                    self.sort_alphabetical(COL_ARTISTS, True)
+            elif self._sort_column == COL_ARTISTS:
+                if self._sort_ascending:
+                    self.sort_alphabetical(COL_ARTISTS, False)
+                else:
+                    self.sort_alphabetical(COL_TITLE, True)
+            else:
+                self.sort_alphabetical(COL_TITLE, True)
+        else:
+            if self._sort_column == column:
+                new_asc = not self._sort_ascending
+            else:
+                new_asc = True
+            self.sort_alphabetical(column, new_asc)
