@@ -1074,6 +1074,7 @@ class PlaylistPageView(QWidget):
 
         self.art_label = HoverableCoverLabel()
         self.art_label.setFixedSize(160, 160)
+        self.art_label.setScaledContents(True)
         self.art_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.art_label.custom_playlist = not self.is_smart
         art_box.addWidget(self.art_label)

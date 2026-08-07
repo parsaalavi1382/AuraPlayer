@@ -25,7 +25,7 @@ from ui.widgets.drag_table_view import AuraDragTableView
 class AlbumCard(QWidget):
     clicked = pyqtSignal(str) # album_key
 
-    def __init__(self, album_key: str, album_name: str, track_path: str, parent=None, is_appears_on: bool = False, main_artist: str = ""):
+    def __init__(self, album_key: str, album_name: str, track_path: str, parent=None, is_appears_on: bool = False, main_artist: str = "", card_width: int = 158):
         super().__init__(parent)
         self.album_key = album_key
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -96,34 +96,27 @@ class AlbumCard(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
         
-        # Cover Art (Bigger: 150x150)
+        # Determine inner cover size
+        cover_size = card_width - 8 # subtract margins (4 + 4)
+
+        # Cover Art (High res target for original quality)
         self.cover_label = QLabel()
-        self.cover_label.setFixedSize(150, 150)
+        self.cover_label.setFixedSize(cover_size, cover_size)
+        self.cover_label.setScaledContents(True)
         self.cover_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface);", theme))
         
-        pixmap = get_album_art(track_path)
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+        
+        high_res_target = 400
+        effective_radius = 8.0 * (high_res_target / max(1, cover_size))
+        
+        pixmap = get_album_art(track_path, target_size=high_res_target, dpr=dpr, corner_radius=effective_radius)
         if pixmap and not pixmap.isNull():
-            # Render at 2x resolution for High-DPI crispness (Supersampling)
-            target_size = 150
-            render_size = target_size * 2
-            
-            scaled_raw = pixmap.scaled(
-                render_size, render_size,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            
-            # Scale down to final target size smoothly
-            final_pixmap = scaled_raw.scaled(
-                target_size, target_size,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            self.cover_label.setPixmap(final_pixmap)
+            self.cover_label.setPixmap(pixmap)
         else:
             from ui.svg_icon import get_default_cover
             self.cover_label.setText("")
-            disc_px = get_default_cover(150, theme, corner_radius=8.0)
+            disc_px = get_default_cover(high_res_target, theme, corner_radius=effective_radius)
             self.cover_label.setPixmap(disc_px)
         
         layout.addWidget(self.cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -131,7 +124,7 @@ class AlbumCard(QWidget):
         # Album name (No year displayed)
         self.name_label = QLabel()
         self.name_label.setWordWrap(True)
-        self.name_label.setFixedWidth(150)
+        self.name_label.setFixedWidth(cover_size)
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.name_label.setText(album_name)
         self.name_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
@@ -144,7 +137,7 @@ class AlbumCard(QWidget):
             self.sec_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Normal))
             self.sec_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
             self.sec_label.setWordWrap(True)
-            self.sec_label.setFixedWidth(150)
+            self.sec_label.setFixedWidth(cover_size)
             self.sec_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
             layout.addWidget(self.sec_label)
         else:
@@ -153,8 +146,9 @@ class AlbumCard(QWidget):
         layout.addStretch()
         outer_layout.addWidget(self.frame)
         
-        # Set fixed size for the whole card to make sure it doesn't scale / squeeze
-        self.setFixedSize(158, 220 if is_appears_on else 200)
+        # Set fixed size for the whole card adapting to dynamically computed width
+        card_height = card_width + (62 if is_appears_on else 42)
+        self.setFixedSize(card_width, card_height)
         
     def focusInEvent(self, event):
         super().focusInEvent(event)
@@ -224,26 +218,28 @@ class AlbumGridWidget(QWidget):
             self.setFixedHeight(0)
             return
             
-        card_width = 158
-        card_height = 220 if self._is_appears_on else 200
+        min_card_width = 158
         spacing = 12
         
         # Calculate how many columns can fit in container_width
         if container_width <= 0:
             container_width = 500  # Safe fallback
             
-        max_cols = max(1, (container_width + spacing) // (card_width + spacing))
+        max_cols = max(1, (container_width + spacing) // (min_card_width + spacing))
+        
+        actual_card_width = (container_width - (max_cols - 1) * spacing) // max_cols
+        actual_card_height = actual_card_width + (62 if self._is_appears_on else 42)
         
         for idx, (key, name, year, track_path, main_artist) in enumerate(self._albums):
             row = idx // max_cols
             col = idx % max_cols
-            card = AlbumCard(key, name, track_path, is_appears_on=self._is_appears_on, main_artist=main_artist)
+            card = AlbumCard(key, name, track_path, is_appears_on=self._is_appears_on, main_artist=main_artist, card_width=actual_card_width)
             card.clicked.connect(self.album_clicked.emit)
             self.grid_layout.addWidget(card, row, col)
             
         # Set dynamic height of this component to show all wrapped rows beautifully
         num_rows = (len(self._albums) + max_cols - 1) // max_cols
-        total_height = num_rows * card_height + (num_rows - 1) * spacing
+        total_height = num_rows * actual_card_height + (num_rows - 1) * spacing
         self.setFixedHeight(total_height)
 
 
@@ -356,6 +352,7 @@ class ArtistPageView(QWidget):
 
         self.cover_label = ArtistHoverableCoverLabel()
         self.cover_label.setFixedSize(120, 120)
+        self.cover_label.setScaledContents(True)
         self.cover_label.mousePressEvent = self._on_cover_clicked
         header_layout.addWidget(self.cover_label)
 

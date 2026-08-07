@@ -28,11 +28,15 @@ def get_playlist_collage(store: LibraryStore, playlist_id: str, size: int = 160,
         if pl_obj and pl_obj.cover_path and os.path.exists(pl_obj.cover_path):
             pix = QPixmap(pl_obj.cover_path)
             if not pix.isNull():
-                return pix.scaled(
-                    size, size,
+                render_size = max(size * 4, min(pix.width(), pix.height()))
+                scaled = pix.scaled(
+                    render_size, render_size,
                     Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                     Qt.TransformationMode.SmoothTransformation
                 )
+                x = max(0, (scaled.width() - render_size) // 2)
+                y = max(0, (scaled.height() - render_size) // 2)
+                return scaled.copy(x, y, render_size, render_size)
 
     # 2. Query tracks in chronological addition order (added_track_paths)
     tracks = []
@@ -50,9 +54,9 @@ def get_playlist_collage(store: LibraryStore, playlist_id: str, size: int = 160,
 
     distinct_pixmaps = []
     seen_albums = set()
+    from core.metadata_reader import get_raw_album_art
     for t in tracks:
-        from core.metadata_reader import get_album_art
-        pix = get_album_art(t.path)
+        pix = get_raw_album_art(t.path)
         if pix and not pix.isNull():
             album_key = t.album_key
             if album_key not in seen_albums:
@@ -61,65 +65,73 @@ def get_playlist_collage(store: LibraryStore, playlist_id: str, size: int = 160,
                 if len(distinct_pixmaps) == 4:
                     break
 
-    collage = QPixmap(size, size)
+    if distinct_pixmaps:
+        min_size = min(min(p.width(), p.height()) for p in distinct_pixmaps)
+        max_cap = 1200 if size > 64 else size * 4
+        render_size = min(max_cap, max(size * 4, min_size if len(distinct_pixmaps) < 2 else min_size * 2))
+    else:
+        render_size = size * 4
+
+    collage = QPixmap(render_size, render_size)
     collage.fill(Qt.GlobalColor.transparent)
     painter = QPainter(collage)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Clip to rounded rect with 12px corners for large cards, or 4px for small thumbnails
-    corner_radius = 12.0 if size > 64 else 4.0
+    # Clip to rounded rect: scale corner radius based on render_size / size
+    base_radius = 12.0 if size > 64 else 4.0
+    corner_radius = base_radius * (render_size / size)
     path = QPainterPath()
-    path.addRoundedRect(QRectF(0, 0, size, size), corner_radius, corner_radius)
+    path.addRoundedRect(QRectF(0, 0, render_size, render_size), corner_radius, corner_radius)
     painter.setClipPath(path)
 
     num_covers = len(distinct_pixmaps)
     if num_covers == 0:
         painter.end()
-        return get_default_cover(size, theme, corner_radius=corner_radius)
+        return get_default_cover(render_size, theme, corner_radius=corner_radius)
     elif num_covers == 1:
         first_pix = distinct_pixmaps[0]
         scaled = first_pix.scaled(
-            size, size,
+            render_size, render_size,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation
         )
-        if scaled.width() != size or scaled.height() != size:
-            x = max(0, (scaled.width() - size) // 2)
-            y = max(0, (scaled.height() - size) // 2)
-            scaled = scaled.copy(x, y, size, size)
+        if scaled.width() != render_size or scaled.height() != render_size:
+            x = max(0, (scaled.width() - render_size) // 2)
+            y = max(0, (scaled.height() - render_size) // 2)
+            scaled = scaled.copy(x, y, render_size, render_size)
         painter.drawPixmap(0, 0, scaled)
     elif num_covers == 2 or num_covers == 3:
         # Show two album covers split vertically (left half and right half)
-        half_width = size // 2
+        half_width = render_size // 2
         
         # Cover 1: Left half
         pix1 = distinct_pixmaps[0]
         scaled1 = pix1.scaled(
-            half_width, size,
+            half_width, render_size,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation
         )
-        if scaled1.width() != half_width or scaled1.height() != size:
+        if scaled1.width() != half_width or scaled1.height() != render_size:
             x = max(0, (scaled1.width() - half_width) // 2)
-            y = max(0, (scaled1.height() - size) // 2)
-            scaled1 = scaled1.copy(x, y, half_width, size)
+            y = max(0, (scaled1.height() - render_size) // 2)
+            scaled1 = scaled1.copy(x, y, half_width, render_size)
         painter.drawPixmap(0, 0, scaled1)
         
         # Cover 2: Right half
         pix2 = distinct_pixmaps[1]
         scaled2 = pix2.scaled(
-            half_width, size,
+            half_width, render_size,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation
         )
-        if scaled2.width() != half_width or scaled2.height() != size:
+        if scaled2.width() != half_width or scaled2.height() != render_size:
             x = max(0, (scaled2.width() - half_width) // 2)
-            y = max(0, (scaled2.height() - size) // 2)
-            scaled2 = scaled2.copy(x, y, half_width, size)
+            y = max(0, (scaled2.height() - render_size) // 2)
+            scaled2 = scaled2.copy(x, y, half_width, render_size)
         painter.drawPixmap(half_width, 0, scaled2)
     else:
         # Show four album covers (2x2 grid)
-        half_size = size // 2
+        half_size = render_size // 2
         coords = [
             (0, 0),
             (half_size, 0),
@@ -182,36 +194,39 @@ def get_smart_playlist_cover(playlist_id: str, size: int = 160, theme_key: str =
         "smart_most_played": "trending_up"
     }.get(playlist_id, "disc")
 
+    # Render at 4x resolution for premium, ultra-crisp display
+    canvas_size = size * 4
     # Create pixmap
-    pixmap = QPixmap(size, size)
+    pixmap = QPixmap(canvas_size, canvas_size)
     pixmap.fill(Qt.GlobalColor.transparent)
     
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     
-    # Clip to rounded rect (12px corners)
+    # Clip to rounded rect (scale 12px corners)
+    corner_radius = 12.0 * 4
     path = QPainterPath()
-    path.addRoundedRect(QRectF(0, 0, size, size), 12.0, 12.0)
+    path.addRoundedRect(QRectF(0, 0, canvas_size, canvas_size), corner_radius, corner_radius)
     painter.setClipPath(path)
     
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QColor(bg))
-    painter.drawRect(0, 0, size, size)
+    painter.drawRect(0, 0, canvas_size, canvas_size)
     
     # Load and draw SVG icon (centered, size 48px or 64px)
     icon_size = 48 if size <= 160 else 64
-    from ui.svg_icon import svg_pixmap
     # Render at 4x resolution for premium, ultra-crisp display
     render_size = icon_size * 4
+    from ui.svg_icon import svg_pixmap
     if playlist_id == "smart_favorites":
         ico_px = svg_pixmap(icon_name, fg, render_size, filled=True)
     else:
         ico_px = svg_pixmap(icon_name, fg, render_size)
         
     if not ico_px.isNull():
-        x = (size - icon_size) // 2
-        y = (size - icon_size) // 2
-        painter.drawPixmap(QRectF(x, y, icon_size, icon_size), ico_px, QRectF(ico_px.rect()))
+        x = (canvas_size - render_size) // 2
+        y = (canvas_size - render_size) // 2
+        painter.drawPixmap(QRectF(x, y, render_size, render_size), ico_px, QRectF(ico_px.rect()))
         
     painter.end()
     return pixmap

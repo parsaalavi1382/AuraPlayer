@@ -64,7 +64,7 @@ _SLIDE_MS = 320          # slide-up / slide-down
 _FADE_MS = 220           # art ↔ lyrics / queue cross-fade
 _ICON_SIZE = 24          # transport icon px
 _ICON_SIZE_MAIN = 28     # play/pause icon px (slightly larger)
-_ART_SIZE = 360          # album art square, px
+_ART_SIZE = 400          # album art square, px
 
 
 def generate_blurred_background(art_pixmap: QPixmap, target_w: int, target_h: int, bg_color_hex: str = "#14161A") -> QPixmap | None:

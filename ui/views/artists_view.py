@@ -23,13 +23,12 @@ def get_artist_collage(store: LibraryStore, artist_name: str, target_size: int =
     from core.metadata_reader import get_album_art
     from ui.svg_icon import get_default_artist_cover
 
-    # Supersampling: Render at 4x resolution for maximum crispness in the list thumbnail
-    render_size = target_size * 4
-
+    # Calculate render size based on image quality
     cover_path = store.get_artist_image(artist_name)
     if cover_path and os.path.exists(cover_path):
         pix = QPixmap(cover_path)
         if not pix.isNull():
+            render_size = max(target_size * 4, min(pix.width(), pix.height()))
             scaled = pix.scaled(
                 render_size, render_size,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
@@ -54,8 +53,8 @@ def get_artist_collage(store: LibraryStore, artist_name: str, target_size: int =
             painter.drawPixmap(0, 0, cropped)
             painter.end()
             
-            # Scale down to final target size smoothly
-            return collage.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            # Return unscaled high-res image
+            return collage
 
     tracks = []
     for t in store.all_tracks():
@@ -65,8 +64,9 @@ def get_artist_collage(store: LibraryStore, artist_name: str, target_size: int =
     distinct_pixmaps = []
     seen_albums = set()
     tracks.sort(key=lambda x: (x.album or "").lower())
+    from core.metadata_reader import get_raw_album_art
     for t in tracks:
-        pix = get_album_art(t.path)
+        pix = get_raw_album_art(t.path)
         if pix and not pix.isNull():
             album_key = t.album_key
             if album_key not in seen_albums:
@@ -74,6 +74,15 @@ def get_artist_collage(store: LibraryStore, artist_name: str, target_size: int =
                 distinct_pixmaps.append(pix)
                 if len(distinct_pixmaps) == 4:
                     break
+
+    # Calculate render size based on minimum input quality
+    if distinct_pixmaps:
+        min_size = min(min(p.width(), p.height()) for p in distinct_pixmaps)
+        # Cap max_cap based on target_size: small icons (like 40px table avatars) only need 4x resolution (160px) max
+        max_cap = 1200 if target_size > 64 else target_size * 4
+        render_size = min(max_cap, max(target_size * 4, min_size if len(distinct_pixmaps) < 2 else min_size * 2))
+    else:
+        render_size = target_size * 4
 
     collage = QPixmap(render_size, render_size)
     collage.fill(Qt.GlobalColor.transparent)
@@ -145,8 +154,8 @@ def get_artist_collage(store: LibraryStore, artist_name: str, target_size: int =
             
     painter.end()
     
-    # Scale down to final target size smoothly
-    return collage.scaled(target_size, target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    # Return unscaled high-res image
+    return collage
 
 
 class _ArtistsTableModel(QAbstractTableModel):
@@ -163,8 +172,10 @@ class _ArtistsTableModel(QAbstractTableModel):
         self.base_model.layoutChanged.connect(self._on_reset)
         self._sort_column = 0
         self._sort_ascending = True
+        self._pixmap_cache = {}
 
     def _on_reset(self):
+        self._pixmap_cache.clear()
         self.beginResetModel()
         self.endResetModel()
 
@@ -206,10 +217,16 @@ class _ArtistsTableModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.UserRole + 1 and index.column() == 0:
             store = self.view.store
             theme_key = store.cache.settings.theme
+            cache_key = (artist.name, theme_key)
+            if cache_key in self._pixmap_cache:
+                return self._pixmap_cache[cache_key]
+
             from ui.theme import THEMES, DEFAULT_THEME
             theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
             # Return pixmap via custom role so delegate can draw it manually (sharp)
-            return get_artist_collage(store, artist.name, 40, theme)
+            pix = get_artist_collage(store, artist.name, 40, theme)
+            self._pixmap_cache[cache_key] = pix
+            return pix
         if role == Qt.ItemDataRole.UserRole:
             return artist
         return None

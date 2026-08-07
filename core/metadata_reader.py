@@ -291,83 +291,138 @@ def _extract_raw_art_bytes(filepath: str) -> Optional[bytes]:
     return None
 
 
+_raw_album_art_cache: dict[str, Optional[QPixmap]] = {}
 _album_art_cache: dict[str, Optional[QPixmap]] = {}
+_album_key_art_cache: dict[str, Optional[QPixmap]] = {}
 
-def get_album_art(filepath: str) -> Optional[QPixmap]:
-    """
-    Returns a square, rounded-corner QPixmap of the track's embedded
-    album art, scaled to fit within MAX_ARTWORK_SIZE, or None if the
-    file has no embedded art / art couldn't be decoded.
 
-    Rounded corners are baked into the returned pixmap itself (rather
-    than left to a QSS border-radius on whatever QLabel displays it) so
-    every call site -- bottom bar, Player Screen, future hover-art
-    previews -- gets visually consistent art with zero extra styling
-    code, and so the corner radius survives QPainter operations like
-    blurred-background extraction (FEATURE_BACKLOG.md item #16) that
-    sample the pixmap directly.
+def get_raw_album_art(filepath: str) -> Optional[QPixmap]:
+    """Extracts and decodes the 100% original full-resolution QPixmap
+    from the audio file's embedded artwork bytes without any quality loss.
     """
-    if filepath in _album_art_cache:
-        return _album_art_cache[filepath]
+    if filepath in _raw_album_art_cache:
+        return _raw_album_art_cache[filepath]
 
     raw_bytes = _extract_raw_art_bytes(filepath)
     if not raw_bytes:
-        _album_art_cache[filepath] = None
+        _raw_album_art_cache[filepath] = None
         return None
 
     source = QPixmap()
     if not source.loadFromData(raw_bytes):
-        _album_art_cache[filepath] = None
+        _raw_album_art_cache[filepath] = None
         return None
 
+    _raw_album_art_cache[filepath] = source
+    return source
+
+
+def render_artwork(
+    source: QPixmap,
+    target_size: int,
+    dpr: float = 1.0,
+    corner_radius: float = 0.0,
+    is_circle: bool = False,
+) -> QPixmap:
+    """Renders a raw QPixmap at exact target size scaled by the device pixel ratio (dpr),
+    using smooth transformation and antialiased clip paths for pin-sharp High-DPI display.
+    """
+    if not source or source.isNull():
+        return source
+
+    render_size = max(16, int(target_size * max(1.0, dpr)))
+
+    # Center-crop & scale from 100% original full resolution smoothly
     scaled = source.scaled(
-        MAX_ARTWORK_SIZE,
-        MAX_ARTWORK_SIZE,
+        render_size,
+        render_size,
         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
         Qt.TransformationMode.SmoothTransformation,
     )
 
-    # Center-crop to an exact square (KeepAspectRatioByExpanding can
-    # overshoot one dimension for non-square source art).
-    if scaled.width() != MAX_ARTWORK_SIZE or scaled.height() != MAX_ARTWORK_SIZE:
-        x = max(0, (scaled.width() - MAX_ARTWORK_SIZE) // 2)
-        y = max(0, (scaled.height() - MAX_ARTWORK_SIZE) // 2)
-        scaled = scaled.copy(x, y, MAX_ARTWORK_SIZE, MAX_ARTWORK_SIZE)
+    if scaled.width() != render_size or scaled.height() != render_size:
+        x = max(0, (scaled.width() - render_size) // 2)
+        y = max(0, (scaled.height() - render_size) // 2)
+        scaled = scaled.copy(x, y, render_size, render_size)
 
-    rounded = QPixmap(MAX_ARTWORK_SIZE, MAX_ARTWORK_SIZE)
-    rounded.fill(Qt.GlobalColor.transparent)
+    output = QPixmap(render_size, render_size)
+    output.fill(Qt.GlobalColor.transparent)
 
-    painter = QPainter(rounded)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter = QPainter(output)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+
     path = QPainterPath()
-    path.addRoundedRect(
-        QRectF(0, 0, MAX_ARTWORK_SIZE, MAX_ARTWORK_SIZE),
-        ARTWORK_CORNER_RADIUS,
-        ARTWORK_CORNER_RADIUS,
-    )
+    if is_circle:
+        path.addEllipse(QRectF(0, 0, render_size, render_size))
+    elif corner_radius > 0:
+        scaled_radius = corner_radius * (render_size / max(1, target_size))
+        path.addRoundedRect(
+            QRectF(0, 0, render_size, render_size),
+            scaled_radius,
+            scaled_radius,
+        )
+    else:
+        path.addRect(QRectF(0, 0, render_size, render_size))
+
     painter.setClipPath(path)
     painter.drawPixmap(0, 0, scaled)
     painter.end()
 
-    _album_art_cache[filepath] = rounded
-    return rounded
+    return output
 
 
-_album_key_art_cache: dict[str, Optional[QPixmap]] = {}
+def get_album_art(
+    filepath: str,
+    target_size: int = 400,
+    dpr: float = 1.0,
+    corner_radius: float = 12.0,
+) -> Optional[QPixmap]:
+    """Returns a high-resolution, High-DPI rendered QPixmap of the track's embedded
+    album art, scaled smoothly from original full resolution.
+    """
+    cache_key = f"{filepath}_{target_size}_{dpr}_{corner_radius}"
+    if cache_key in _album_art_cache:
+        return _album_art_cache[cache_key]
+
+    raw_source = get_raw_album_art(filepath)
+    if not raw_source or raw_source.isNull():
+        _album_art_cache[cache_key] = None
+        return None
+
+    rendered = render_artwork(
+        raw_source,
+        target_size=target_size,
+        dpr=dpr,
+        corner_radius=corner_radius,
+    )
+    _album_art_cache[cache_key] = rendered
+    return rendered
 
 
 def clear_album_art_cache(filepath: Optional[str] = None, album_key: Optional[str] = None) -> None:
     """Clear cached pixmaps when metadata/cover art is modified."""
-    if filepath and filepath in _album_art_cache:
-        del _album_art_cache[filepath]
+    if filepath:
+        if filepath in _raw_album_art_cache:
+            del _raw_album_art_cache[filepath]
+        keys_to_del = [k for k in _album_art_cache.keys() if k.startswith(filepath)]
+        for k in keys_to_del:
+            del _album_art_cache[k]
     if album_key and album_key in _album_key_art_cache:
         del _album_key_art_cache[album_key]
     if not filepath and not album_key:
+        _raw_album_art_cache.clear()
         _album_art_cache.clear()
         _album_key_art_cache.clear()
 
 
-def get_track_album_art(track: Optional[Track], store: Optional[object] = None) -> Optional[QPixmap]:
+def get_track_album_art(
+    track: Optional[Track],
+    store: Optional[object] = None,
+    target_size: int = 400,
+    dpr: float = 1.0,
+    corner_radius: float = 12.0,
+) -> Optional[QPixmap]:
     """
     Returns the album art QPixmap for a track.
     If tracks belong to the same album, they share the exact same album cover
@@ -377,16 +432,10 @@ def get_track_album_art(track: Optional[Track], store: Optional[object] = None) 
         return None
 
     album_key = getattr(track, "album_key", None)
-    if album_key and album_key in _album_key_art_cache:
-        cached = _album_key_art_cache[album_key]
-        if cached is not None:
-            return cached
 
     # Direct extraction for this track
-    direct_art = get_album_art(track.path)
+    direct_art = get_album_art(track.path, target_size=target_size, dpr=dpr, corner_radius=corner_radius)
     if direct_art is not None:
-        if album_key:
-            _album_key_art_cache[album_key] = direct_art
         return direct_art
 
     # If this track has no embedded art, look up other tracks in the same album (prioritizing first track with art)
@@ -396,12 +445,8 @@ def get_track_album_art(track: Optional[Track], store: Optional[object] = None) 
             for t in album_obj.tracks:
                 if t.path == track.path:
                     continue
-                art = get_album_art(t.path)
+                art = get_album_art(t.path, target_size=target_size, dpr=dpr, corner_radius=corner_radius)
                 if art is not None:
-                    _album_key_art_cache[album_key] = art
-                    _album_art_cache[track.path] = art
                     return art
 
-    if album_key:
-        _album_key_art_cache[album_key] = None
     return None

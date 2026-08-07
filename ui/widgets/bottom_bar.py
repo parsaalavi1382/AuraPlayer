@@ -117,6 +117,7 @@ class BottomBar(QFrame):
         self.art_label = QLabel()
         self.art_label.setObjectName("bottomBarArt")
         self.art_label.setFixedSize(64, 64)
+        self.art_label.setScaledContents(True)
         self.art_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_main_layout.addWidget(self.art_label)
 
@@ -576,19 +577,13 @@ class BottomBar(QFrame):
         """Set the album art thumbnail."""
         self.art_label.setText("")
         if pixmap and not pixmap.isNull():
-            # حفظ سایز جدید کاور (64x64)
-            scaled = pixmap.scaled(
-                64, 64,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            self.art_label.setPixmap(scaled)
+            self.art_label.setPixmap(pixmap)
             self._has_custom_art = True
         else:
             self._has_custom_art = False
             from ui.svg_icon import get_default_cover
             theme_dict = self._theme if self._theme else {}
-            self.art_label.setPixmap(get_default_cover(64, theme_dict, corner_radius=4.0))
+            self.art_label.setPixmap(get_default_cover(64, theme_dict, corner_radius=6.0))
 
     def set_playing(self, is_playing: bool) -> None:
         self._is_playing = is_playing

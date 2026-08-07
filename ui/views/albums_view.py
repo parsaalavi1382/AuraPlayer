@@ -165,9 +165,8 @@ class AlbumHoverDelegate(QStyledItemDelegate):
             cover_rect = QRect(rect.left(), rect.top() + (rect.height() - cover_size) // 2, cover_size, cover_size)
             
             # Load art & draw with rounded corners and high quality
-            art_pixmap = None
-            if album.tracks:
-                art_pixmap = get_album_art(album.tracks[0].path)
+            dpr = painter.device().devicePixelRatioF() if (painter and painter.device()) else 1.0
+            art_pixmap = get_album_art(album.tracks[0].path, target_size=cover_size, dpr=dpr, corner_radius=4.0) if album.tracks else None
                 
             clip_path = QPainterPath()
             clip_path.addRoundedRect(QRectF(cover_rect), 4.0, 4.0)
@@ -178,13 +177,7 @@ class AlbumHoverDelegate(QStyledItemDelegate):
             painter.setClipPath(clip_path)
 
             if art_pixmap and not art_pixmap.isNull():
-                render_size = cover_size * 2
-                scaled = art_pixmap.scaled(
-                    render_size, render_size,
-                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                painter.drawPixmap(cover_rect, scaled)
+                painter.drawPixmap(cover_rect, art_pixmap)
             else:
                 from ui.svg_icon import get_default_cover
                 disc_px = get_default_cover(cover_size, theme, corner_radius=4.0)

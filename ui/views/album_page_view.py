@@ -977,22 +977,19 @@ class AlbumPageView(QWidget):
 
         # Large Album Art on the Left
         self.art_label = QLabel()
-        self.art_label.setFixedSize(160, 160)
+        self.art_label.setFixedSize(200, 200)
+        self.art_label.setScaledContents(True)
         self.art_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface);", theme))
         
         # Load art
-        art_pixmap = get_album_art(first_track.path)
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+        art_pixmap = get_album_art(first_track.path, target_size=200, dpr=dpr, corner_radius=12.0)
         if art_pixmap and not art_pixmap.isNull():
-            scaled = art_pixmap.scaled(
-                160, 160,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            self.art_label.setPixmap(scaled)
+            self.art_label.setPixmap(art_pixmap)
         else:
             from ui.svg_icon import get_default_cover
             self.art_label.setText("")
-            disc_px = get_default_cover(160, theme, corner_radius=12.0)
+            disc_px = get_default_cover(200, theme, corner_radius=12.0)
             self.art_label.setPixmap(disc_px)
 
         header_layout.addWidget(self.art_label)

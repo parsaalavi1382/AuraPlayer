@@ -52,6 +52,23 @@ class AlbumEditorDialog(QDialog):
 
         theme_key = self.store.cache.settings.theme
         theme = THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+        from ui.theme import apply_theme_vars
+        self.setStyleSheet(apply_theme_vars("""
+            QDialog {
+                background-color: var(--bg);
+                color: var(--text_primary);
+            }
+            QLabel {
+                color: var(--text_primary);
+            }
+            QLineEdit, QSpinBox {
+                background-color: var(--surface);
+                color: var(--text_primary);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 6px 10px;
+            }
+        """, theme))
 
         # Main layouts
         self.dialog_layout = QVBoxLayout(self)
@@ -75,24 +92,21 @@ class AlbumEditorDialog(QDialog):
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         self.cover_label = QLabel()
-        self.cover_label.setFixedSize(160, 160)
+        self.cover_label.setFixedSize(180, 180)
+        self.cover_label.setScaledContents(True)
         self.cover_label.setStyleSheet("border-radius: 8px; border: 1px solid var(--border); background-color: var(--surface);")
 
         if first_track:
-            art_pixmap = get_album_art(first_track.path)
+            dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+            art_pixmap = get_album_art(first_track.path, target_size=180, dpr=dpr, corner_radius=8.0)
             if art_pixmap and not art_pixmap.isNull():
-                scaled = art_pixmap.scaled(
-                    160, 160,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                self.cover_label.setPixmap(scaled)
+                self.cover_label.setPixmap(art_pixmap)
             else:
                 from ui.svg_icon import get_default_cover
-                self.cover_label.setPixmap(get_default_cover(160, theme, corner_radius=8.0))
+                self.cover_label.setPixmap(get_default_cover(180, theme, corner_radius=8.0))
         else:
             from ui.svg_icon import get_default_cover
-            self.cover_label.setPixmap(get_default_cover(160, theme, corner_radius=8.0))
+            self.cover_label.setPixmap(get_default_cover(180, theme, corner_radius=8.0))
 
         left_layout.addWidget(self.cover_label)
 
@@ -170,14 +184,12 @@ class AlbumEditorDialog(QDialog):
         )
         if path:
             self._new_cover_path = path
+            from core.metadata_reader import render_artwork
             pixmap = QPixmap(path)
             if not pixmap.isNull():
-                scaled = pixmap.scaled(
-                    160, 160,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                self.cover_label.setPixmap(scaled)
+                dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+                rendered = render_artwork(pixmap, target_size=180, dpr=dpr, corner_radius=8.0)
+                self.cover_label.setPixmap(rendered)
 
     def _save_changes(self) -> None:
         try:

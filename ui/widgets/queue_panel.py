@@ -262,13 +262,8 @@ class QueueCoverLabel(QWidget):
         self.pixmap = None
 
         # Load cover art
-        raw_pixmap = get_album_art(track_path) if (track_path and has_embedded_art) else None
-        if raw_pixmap and not raw_pixmap.isNull():
-            self.pixmap = raw_pixmap.scaled(
-                32, 32,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+        self.pixmap = get_album_art(track_path, target_size=32, dpr=dpr, corner_radius=4.0) if (track_path and has_embedded_art) else None
 
     def set_force_show_play(self, show: bool):
         if self.force_show_play != show:

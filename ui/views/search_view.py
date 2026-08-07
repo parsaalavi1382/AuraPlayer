@@ -977,9 +977,8 @@ class SearchOverlay(QFrame):
         pix = None
         if has_art:
             from core.metadata_reader import get_album_art
-            raw = get_album_art(path)
-            if raw and not raw.isNull():
-                pix = raw.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+            dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+            pix = get_album_art(path, target_size=size, dpr=dpr, corner_radius=6.0)
         if not pix or pix.isNull():
             pix = self._get_default_cover(size)
         self._art_cache[cache_key] = pix

@@ -356,18 +356,10 @@ class TrackHoverDelegate(QStyledItemDelegate):
             # 1. Cache & Load scaled art
             if track.path not in self.art_cache:
                 from core.metadata_reader import get_album_art
-                raw_pixmap = get_album_art(track.path)
-                if raw_pixmap and not raw_pixmap.isNull():
-                    render_size = cover_size * 2
-                    scaled = raw_pixmap.scaled(
-                        render_size, render_size,
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    self.art_cache[track.path] = scaled
-                else:
-                    self.art_cache[track.path] = None
-                    
+                dpr = painter.device().devicePixelRatioF() if (painter and painter.device()) else 1.0
+                pix = get_album_art(track.path, target_size=cover_size, dpr=dpr, corner_radius=4.0)
+                self.art_cache[track.path] = pix
+
             pixmap = self.art_cache[track.path]
             
             # Determine states

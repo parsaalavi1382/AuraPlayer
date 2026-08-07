@@ -933,12 +933,16 @@ class MainWindow(QMainWindow):
         and push it to both the bottom bar thumbnail and Player Screen.
         """
         track = self.store.get_track(track_path) if track_path else None
-        art = get_track_album_art(track, self.store) if track else get_album_art(track_path)
-        self.bottom_bar.set_art(art)
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+
+        bottom_bar_art = get_track_album_art(track, self.store, target_size=64, dpr=dpr, corner_radius=6.0) if track else get_album_art(track_path, target_size=64, dpr=dpr, corner_radius=6.0)
+        player_art = get_track_album_art(track, self.store, target_size=600, dpr=dpr, corner_radius=16.0) if track else get_album_art(track_path, target_size=600, dpr=dpr, corner_radius=16.0)
+
+        self.bottom_bar.set_art(bottom_bar_art)
         self.player_screen.set_track(
             track.title if track else "",
             ", ".join(track.artists) if track else "",
-            art,
+            player_art,
             track_path,
         )
 
