@@ -2,7 +2,7 @@
 
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 block_cipher = None
 
@@ -10,17 +10,21 @@ rlottie_datas = collect_data_files('rlottie_python')
 rlottie_binaries = collect_dynamic_libs('rlottie_python')
 qtawesome_datas = collect_data_files('qtawesome')
 
+winrt_datas = collect_data_files('winrt') if sys.platform == 'win32' else []
+winrt_binaries = collect_dynamic_libs('winrt') if sys.platform == 'win32' else []
+winrt_submodules = collect_submodules('winrt') if sys.platform == 'win32' else []
+
 # Resolve absolute path to project directory
 project_dir = os.path.abspath(os.path.dirname(__file__) if '__file__' in locals() else os.getcwd())
 
 a = Analysis(
     ['main.py'],
     pathex=[project_dir],
-    binaries=rlottie_binaries,
+    binaries=rlottie_binaries + winrt_binaries,
     datas=[
         # Include all SVG icons and PNG logo assets from the assets directory
         (os.path.join(project_dir, 'assets'), 'assets'),
-    ] + rlottie_datas + qtawesome_datas,
+    ] + rlottie_datas + qtawesome_datas + winrt_datas,
     hiddenimports=[
         # Ensure mutagen and QtSvg are bundled correctly
         'mutagen',
@@ -36,9 +40,16 @@ a = Analysis(
         'PyQt6.QtSvg',
         'rlottie_python',
         'qtawesome',
-        'winsdk',
         'winrt',
-    ],
+        'winrt.system',
+        'winrt.runtime',
+        'winrt.windows.media',
+        'winrt.windows.media.playback',
+        'winrt.windows.media.control',
+        'winrt.windows.storage',
+        'winrt.windows.storage.streams',
+        'winrt.windows.foundation',
+    ] + winrt_submodules,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

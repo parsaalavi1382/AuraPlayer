@@ -50,6 +50,8 @@ class SMTCIntegration(QObject):
             
             self._updater = self._smtc.display_updater
             self._updater.type = MediaPlaybackType.MUSIC
+            self._updater.app_media_id = "AuraPlayer"
+            self._updater.update()
             
             logging.info("SMTC initialized successfully.")
         except Exception as e:
@@ -78,6 +80,7 @@ class SMTCIntegration(QObject):
 
     def _do_update_metadata(self, title: str, artist: str, album: str, track_path: str):
         try:
+            self._updater.app_media_id = "AuraPlayer"
             props = self._updater.music_properties
             props.title = title
             props.artist = artist
@@ -85,12 +88,8 @@ class SMTCIntegration(QObject):
             props.album_title = album
             self._updater.update()
             
-            if track_path:
-                import threading
-                threading.Thread(target=self._update_thumbnail_bg, args=(track_path,), daemon=True).start()
-            else:
-                self._updater.thumbnail = None
-                self._updater.update()
+            import threading
+            threading.Thread(target=self._update_thumbnail_bg, args=(track_path,), daemon=True).start()
         except Exception as e:
             logging.warning(f"SMTC metadata update failed: {e}")
 
@@ -101,7 +100,7 @@ class SMTCIntegration(QObject):
             import os
             import asyncio
             
-            raw_bytes = _extract_raw_art_bytes(track_path)
+            raw_bytes = _extract_raw_art_bytes(track_path) if track_path else None
             if raw_bytes:
                 smtc_cover_path = get_writable_data_path("smtc_cover.jpg")
                 with open(smtc_cover_path, "wb") as f:
@@ -122,9 +121,11 @@ class SMTCIntegration(QObject):
                         
                 thumb = asyncio.run(_get_thumb())
                 if thumb:
+                    self._updater.app_media_id = "AuraPlayer"
                     self._updater.thumbnail = thumb
                     self._updater.update()
             else:
+                self._updater.app_media_id = "AuraPlayer"
                 self._updater.thumbnail = None
                 self._updater.update()
         except Exception as e:
