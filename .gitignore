@@ -14,7 +14,6 @@ test_music/
 artist_covers/
 playlist_covers/
 Module tests/
-artist_cover_test.py
 .music-sync.json
 .run.bat
 
