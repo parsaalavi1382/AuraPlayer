@@ -66,14 +66,7 @@ class MainWindow(QMainWindow):
         # For PySide6, simply use: from PySide6.QtGui import QIcon
         from PyQt6.QtGui import QIcon
         
-        # Windows taskbar icon fix: prevent grouping with python.exe and load distinct icon
-        if sys.platform == 'win32':
-            try:
-                import ctypes
-                myappid = 'parsaalavi.auraplayer.musicplayer.1.0'
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-            except Exception:
-                pass
+
 
         # Multi-size high-resolution icon registration for crisp rendering on High-DPI/4K screens
         icon = QIcon()

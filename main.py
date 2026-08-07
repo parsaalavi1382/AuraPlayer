@@ -18,12 +18,7 @@ CACHE_PATH = get_writable_data_path("library_cache.json")
 
 
 def main():
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AuraPlayer")
-        except Exception:
-            pass
+
 
     app = QApplication(sys.argv)
     app.setApplicationName("AuraPlayer")

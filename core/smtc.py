@@ -1,4 +1,5 @@
 import sys
+import os
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -50,7 +51,6 @@ class SMTCIntegration(QObject):
             
             self._updater = self._smtc.display_updater
             self._updater.type = MediaPlaybackType.MUSIC
-            self._updater.app_media_id = "AuraPlayer"
             self._updater.update()
             
             logging.info("SMTC initialized successfully.")
@@ -60,17 +60,20 @@ class SMTCIntegration(QObject):
     def _on_button_pressed(self, sender, args):
         # This fires on a background COM thread.
         # Emit signals to safely transition to the main UI thread.
-        btn = args.button
-        if btn == self._ButtonEnum.PLAY:
-            self.play_requested.emit()
-        elif btn == self._ButtonEnum.PAUSE:
-            self.pause_requested.emit()
-        elif btn == self._ButtonEnum.NEXT:
-            self.next_requested.emit()
-        elif btn == self._ButtonEnum.PREVIOUS:
-            self.prev_requested.emit()
-        elif btn == self._ButtonEnum.STOP:
-            self.stop_requested.emit()
+        try:
+            btn = args.button
+            if btn == self._ButtonEnum.PLAY:
+                self.play_requested.emit()
+            elif btn == self._ButtonEnum.PAUSE:
+                self.pause_requested.emit()
+            elif btn == self._ButtonEnum.NEXT:
+                self.next_requested.emit()
+            elif btn == self._ButtonEnum.PREVIOUS:
+                self.prev_requested.emit()
+            elif btn == self._ButtonEnum.STOP:
+                self.stop_requested.emit()
+        except Exception as e:
+            logging.warning(f"Error handling SMTC button press: {e}")
 
     def update_metadata(self, title: str, artist: str, album: str = "", track_path: str = ""):
         if not self._updater:
@@ -79,8 +82,10 @@ class SMTCIntegration(QObject):
         QTimer.singleShot(250, lambda: self._do_update_metadata(title, artist, album, track_path))
 
     def _do_update_metadata(self, title: str, artist: str, album: str, track_path: str):
+        if sys.platform != "win32" or not self._updater:
+            return
+
         try:
-            self._updater.app_media_id = "AuraPlayer"
             props = self._updater.music_properties
             props.title = title
             props.artist = artist
@@ -89,27 +94,39 @@ class SMTCIntegration(QObject):
             self._updater.update()
             
             import threading
-            threading.Thread(target=self._update_thumbnail_bg, args=(track_path,), daemon=True).start()
+            threading.Thread(target=self._update_thumbnail_bg, args=(track_path, title), daemon=True).start()
         except Exception as e:
             logging.warning(f"SMTC metadata update failed: {e}")
 
-    def _update_thumbnail_bg(self, track_path: str):
+    def _update_thumbnail_bg(self, track_path: str, title: str):
+        if sys.platform != "win32" or not self._updater:
+            return
         try:
             from core.metadata_reader import _extract_raw_art_bytes
             from utils.paths import get_writable_data_path
-            import os
             import asyncio
             
             raw_bytes = _extract_raw_art_bytes(track_path) if track_path else None
+            
             if raw_bytes:
-                smtc_cover_path = get_writable_data_path("smtc_cover.jpg")
-                with open(smtc_cover_path, "wb") as f:
-                    f.write(raw_bytes)
-                    
+                target_image_path = get_writable_data_path("smtc_cover.jpg")
+                try:
+                    with open(target_image_path, "wb") as f:
+                        f.write(raw_bytes)
+                except Exception as e:
+                    logging.warning(f"Failed writing SMTC cover file: {e}")
+            else:
+                if getattr(sys, 'frozen', False):
+                    base_dir = sys._MEIPASS
+                else:
+                    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                target_image_path = os.path.join(base_dir, "assets", "logo.png")
+            
+            abs_path = os.path.abspath(target_image_path)
+            
+            if os.path.exists(target_image_path):
                 from winrt.windows.storage import StorageFile
                 from winrt.windows.storage.streams import RandomAccessStreamReference
-                
-                abs_path = os.path.abspath(smtc_cover_path)
                 
                 async def _get_thumb():
                     try:
@@ -121,16 +138,17 @@ class SMTCIntegration(QObject):
                         
                 thumb = asyncio.run(_get_thumb())
                 if thumb:
-                    self._updater.app_media_id = "AuraPlayer"
                     self._updater.thumbnail = thumb
-                    self._updater.update()
+                else:
+                    self._updater.thumbnail = None
             else:
-                self._updater.app_media_id = "AuraPlayer"
                 self._updater.thumbnail = None
-                self._updater.update()
+                
+            self._updater.update()
+            logging.info(f"SMTC background cover updated for: {title}")
         except Exception as e:
             logging.warning(f"SMTC background thumbnail update failed: {e}")
-            
+    
     def update_playback_status(self, is_playing: bool, is_stopped: bool = False):
         if not self._smtc:
             return
