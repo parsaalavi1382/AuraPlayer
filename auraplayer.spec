@@ -36,6 +36,8 @@ a = Analysis(
         'PyQt6.QtSvg',
         'rlottie_python',
         'qtawesome',
+        'winsdk',
+        'winrt',
     ],
     hookspath=[],
     hooksconfig={},
