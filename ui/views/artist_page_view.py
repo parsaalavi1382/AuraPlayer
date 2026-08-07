@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QTableView, QHeaderView, QAbstractItemView, QScrollArea, QFrame,
     QSizePolicy, QGridLayout, QMenu, QFileDialog
 )
-from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QLinearGradient, QCursor, QAction
+from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QLinearGradient, QCursor, QAction, QFontMetrics, QTextLayout, QTextOption
 
 from core.library_store import LibraryStore
 from core.models import Track
@@ -20,6 +20,43 @@ from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTIST
 from ui.views.tracks_view import TrackHoverDelegate, HoverEventFilter
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
+
+
+def elide_text_2_lines(text: str, font: QFont, width: int) -> str:
+    if not text:
+        return ""
+    layout = QTextLayout(text, font)
+    option = QTextOption()
+    option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+    layout.setTextOption(option)
+    
+    layout.beginLayout()
+    line1 = layout.createLine()
+    if not line1.isValid():
+        layout.endLayout()
+        return text
+    line1.setLineWidth(width)
+    
+    line2 = layout.createLine()
+    if not line2.isValid():
+        layout.endLayout()
+        return text
+    line2.setLineWidth(width)
+    
+    line3 = layout.createLine()
+    layout.endLayout()
+    
+    if not line3.isValid():
+        return text
+    
+    l1_len = line1.textLength()
+    l1_text = text[:l1_len]
+    l2_remainder = text[l1_len:].lstrip()
+    
+    fm = QFontMetrics(font)
+    elided_l2 = fm.elidedText(l2_remainder, Qt.TextElideMode.ElideRight, width)
+    
+    return l1_text + elided_l2
 
 
 class AlbumCard(QWidget):
@@ -121,33 +158,35 @@ class AlbumCard(QWidget):
         
         layout.addWidget(self.cover_label, alignment=Qt.AlignmentFlag.AlignCenter)
         
-        # Album name (No year displayed)
-        self.name_label = QLabel()
+        # Album name (Max 2 lines)
+        name_font = QFont("Segoe UI", 10, QFont.Weight.Bold)
+        elided_name = elide_text_2_lines(album_name, name_font, cover_size)
+        self.name_label = QLabel(elided_name)
         self.name_label.setWordWrap(True)
         self.name_label.setFixedWidth(cover_size)
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.name_label.setText(album_name)
-        self.name_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        self.name_label.setFont(name_font)
         self.name_label.setStyleSheet(apply_theme_vars("color: var(--text_primary);", theme))
         layout.addWidget(self.name_label)
         
-        # Shows featured artist if it's "Appears on"
-        if is_appears_on:
-            self.sec_label = QLabel(main_artist)
-            self.sec_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Normal))
-            self.sec_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
-            self.sec_label.setWordWrap(True)
-            self.sec_label.setFixedWidth(cover_size)
-            self.sec_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-            layout.addWidget(self.sec_label)
-        else:
-            self.sec_label = None
+        # Artist name under title (Max 1 line)
+        sec_font = QFont("Segoe UI", 9, QFont.Weight.Normal)
+        fm_sec = QFontMetrics(sec_font)
+        display_artist = main_artist if main_artist else ""
+        elided_artist = fm_sec.elidedText(display_artist, Qt.TextElideMode.ElideRight, cover_size)
+        self.sec_label = QLabel(elided_artist)
+        self.sec_label.setFont(sec_font)
+        self.sec_label.setStyleSheet(apply_theme_vars("color: var(--text_secondary);", theme))
+        self.sec_label.setWordWrap(False)
+        self.sec_label.setFixedWidth(cover_size)
+        self.sec_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(self.sec_label)
             
         layout.addStretch()
         outer_layout.addWidget(self.frame)
         
         # Set fixed size for the whole card adapting to dynamically computed width
-        card_height = card_width + (62 if is_appears_on else 42)
+        card_height = card_width + 64
         self.setFixedSize(card_width, card_height)
         
     def focusInEvent(self, event):
@@ -228,7 +267,7 @@ class AlbumGridWidget(QWidget):
         max_cols = max(1, (container_width + spacing) // (min_card_width + spacing))
         
         actual_card_width = (container_width - (max_cols - 1) * spacing) // max_cols
-        actual_card_height = actual_card_width + (62 if self._is_appears_on else 42)
+        actual_card_height = actual_card_width + 64
         
         for idx, (key, name, year, track_path, main_artist) in enumerate(self._albums):
             row = idx // max_cols
