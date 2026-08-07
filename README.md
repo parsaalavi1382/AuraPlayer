@@ -15,9 +15,9 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ### 🚀 Official Release Binaries & Cross-Platform Download
 
-I have officially published the **[v1.0.0 Official Release](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/v1.0.0)** with compiled binaries for **Windows, macOS, and Linux**.
+I have officially published the **[v1.1.0 Official Release](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/v1.1.0)** with compiled binaries for **Windows, macOS, and Linux**.
 
-* **Windows:** Fully packaged and verified using Inno Setup (`installer.iss`). Includes both full installation wizard (`AuraPlayer_Setup_v1.0.0.exe`) and portable single-folder build (`AuraPlayer_Windows.zip`).
+* **Windows:** Fully packaged and verified using Inno Setup (`installer.iss`). Includes both full installation wizard (`AuraPlayer_Setup_v1.1.0.exe`) and portable single-folder build (`AuraPlayer_Windows.zip`).
 * **macOS & Linux:** The build pipelines are configured via GitHub Actions (`release.yml`), but since I do not have physical access to a Mac or Linux machine to test all environment hooks, **your feedback is deeply appreciated!**
 
 If you are on macOS or Linux, please feel free to download the release, run it, and let me know how it handles native audio output, fonts, and window framing.
@@ -26,9 +26,9 @@ If you are on macOS or Linux, please feel free to download the release, run it, 
 
 ---
 
-## 🌟 Project Status: Official Release (v1.0.0)
+## 🌟 Project Status: Official Release (v1.1.0)
 
-AuraPlayer v1.0.0 is officially released! Core features including gapless audio playback, Lottie vector animations, player screen background blur, live search overlay, library folder synchronization, song tag editing, advanced track properties, LRC lyric sync, custom playlists, and dynamic theme transitions are fully functional.
+AuraPlayer v1.1.0 is officially released! Key updates include **Windows System Media Transport Controls (SMTC)** integration for OS-level background & headphone controls (Windows OS), **original quality album cover art rendering** across all views, **60 FPS lag-free tab transitions** via pixmap caching, full **Keyboard Shortcuts & Hardware Device Controls**, and updated **Artist Discography layouts** with 2-line title elision.
 
 🐛 **Found an issue?** If you run into any bugs or have suggestions, please open a ticket in the **Issues** section.
 
@@ -67,6 +67,7 @@ AuraPlayer v1.0.0 is officially released! Core features including gapless audio 
 ### 3. Advanced Audio Player Engine & Lottie Animated Controls
 * Plays popular music formats including `.mp3`, `.flac`, `.m4a`, `.wav`, and `.ogg` files.
 * **Interactive Lottie Vector Controls:** Powered by `rlottie-python`, featuring smooth vector animations for Play/Pause, Shuffle, Repeat, Mute, and Favorite Heart buttons with real-time theme-aware color tinting and micro-interactions.
+* **Windows SMTC & Headphone Controls (Windows OS):** Integrates natively with Windows System Media Transport Controls to display track title, artist name, and high-res album artwork on OS overlays/lock screens, supporting play/pause/skip via bluetooth headphones and media keys. Safely falls back on macOS and Linux.
 * **Dead-Centered Transport Bar:** Perfectly balanced horizontal layout alignment keeping playback controls centered across any window size.
 * **Silence-Free Playback:** Automatically preloads the next song in the background to hand off seamlessly near the end of the current track, ensuring no silent gaps between songs.
 * **Smart Music Controls:** Precise single-clicks for track skipping, press-and-hold for continuous fast-forward or rewind (seeking) inside a song, and a smart rewind button (restarts the current song if played past 3 seconds; otherwise skips to the actual previous song).
@@ -103,6 +104,19 @@ AuraPlayer v1.0.0 is officially released! Core features including gapless audio 
 * **Smart & Custom Playlists:** Features automated Smart Playlists (*Favorites*, *Recently Added*, *Recently Played*, *Most Played*) alongside full support for creating, renaming, and deleting Custom Playlists.
 * **Custom Playlist Cover Art & Smart Collage Fallback:** Custom playlists support setting a custom cover image. If no custom image is assigned, AuraPlayer automatically generates a beautiful default cover collage using the artwork from the first 4 unique albums added to that playlist (ordered by addition date). If tracks are deleted or modified, the collage dynamically cascades to display the next available album artwork.
 * **Drag-and-Drop from Queue to Playlists:** Drag songs directly out of the Queue side-panel and drop them onto any custom playlist or smart playlist card to add them instantly.
+
+### 8. Keyboard Shortcuts & Hardware Device Controls
+* **`Spacebar`**: Toggle Play / Pause instantly.
+* **`Ctrl + F`**: Open the live floating search overlay from anywhere in the app.
+* **`Media Next / Prev / Play / Pause`**: Full hardware media key and bluetooth headphone control support via native OS media routing.
+* **`Up / Down Arrow`**: Smooth keyboard navigation through track lists, queues, and search results.
+* **`Enter / Return / Space`**: Trigger highlighted tracks or open focused album cards.
+* **`Delete`**: Remove selected track from queue or delete custom playlist.
+* **`Esc`**: Dismiss active floating search modal or popups cleanly.
+
+### 9. Original Cover Quality & 60 FPS Performance Engine
+* **Original High-Res Rendering**: Album covers, artist collages, and playlist covers generate using full source resolution with dynamic corner radius scaling.
+* **In-Memory Pixmap Caching**: Table models utilize internal pixmap caches (`_pixmap_cache`), delivering 60 FPS lag-free tab switching and scrolling.
 
 ---
 
