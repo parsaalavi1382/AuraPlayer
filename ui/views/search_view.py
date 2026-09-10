@@ -9,8 +9,8 @@ import html
 import re
 from typing import Callable, Any
 
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect, QSize, QPoint
-from PyQt6.QtGui import QPixmap, QColor, QPainter, QCursor, QAction
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect, QRectF, QSize, QPoint
+from PyQt6.QtGui import QPixmap, QColor, QPainter, QCursor, QAction, QPainterPath
 from PyQt6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QScrollArea, QMenu, QGraphicsDropShadowEffect, QSizePolicy,
@@ -123,18 +123,30 @@ class HoverLinkLabel(QLabel):
         super().mousePressEvent(event)
 
 
-class StaticCoverLabel(QLabel):
+class StaticCoverLabel(QFrame):
     """Static cover image without hover effects, pointing cursor, or click events."""
-    def __init__(self, size: int = 42, parent=None):
+    def __init__(self, size: int = 42, corner_radius: float = 4.0, parent=None):
         super().__init__(parent)
         self.setFixedSize(size, size)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._pixmap: QPixmap | None = None
+        self._corner_radius = corner_radius
 
     def set_cover(self, pixmap: QPixmap | None) -> None:
-        if pixmap and not pixmap.isNull():
-            self.setPixmap(pixmap)
-        else:
-            self.clear()
+        self._pixmap = pixmap
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._pixmap and not self._pixmap.isNull():
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            if self._corner_radius > 0:
+                path = QPainterPath()
+                path.addRoundedRect(QRectF(self.rect()), self._corner_radius, self._corner_radius)
+                painter.setClipPath(path)
+            from ui.widgets.aspect_label import paint_pixmap_aspect_fill
+            paint_pixmap_aspect_fill(painter, self.rect(), self._pixmap)
 
 
 class CoverThumbButton(QFrame):
@@ -195,13 +207,19 @@ class CoverThumbButton(QFrame):
     def paintEvent(self, event) -> None:
         import time, math
         from PyQt6.QtCore import QRectF
-        from PyQt6.QtGui import QBrush
+        from PyQt6.QtGui import QBrush, QPainterPath
 
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()), 4.0, 4.0)
+        painter.setClipPath(path)
+
         if self._pixmap and not self._pixmap.isNull():
-            painter.drawPixmap(0, 0, self.width(), self.height(), self._pixmap)
+            from ui.widgets.aspect_label import paint_pixmap_aspect_fill
+            paint_pixmap_aspect_fill(painter, self.rect(), self._pixmap)
             
         if self._is_playing:
             painter.fillRect(self.rect(), QColor(0, 0, 0, 150))
@@ -350,7 +368,7 @@ class ArtistRow(BaseSearchRow):
         layout.setContentsMargins(8, 6, 12, 6)
         layout.setSpacing(12)
 
-        self.cover_lbl = StaticCoverLabel(size=42, parent=self)
+        self.cover_lbl = StaticCoverLabel(size=42, corner_radius=0.0, parent=self)
         self.cover_lbl.set_cover(cover_pix)
         layout.addWidget(self.cover_lbl)
 
@@ -379,7 +397,7 @@ class AlbumRow(BaseSearchRow):
         layout.setContentsMargins(8, 6, 12, 6)
         layout.setSpacing(12)
 
-        self.cover_lbl = StaticCoverLabel(size=42, parent=self)
+        self.cover_lbl = StaticCoverLabel(size=42, corner_radius=4.0, parent=self)
         self.cover_lbl.set_cover(cover_pix)
         layout.addWidget(self.cover_lbl)
 
@@ -459,7 +477,7 @@ class PlaylistRow(BaseSearchRow):
         layout.setContentsMargins(8, 6, 12, 6)
         layout.setSpacing(12)
 
-        self.cover_lbl = StaticCoverLabel(size=42, parent=self)
+        self.cover_lbl = StaticCoverLabel(size=42, corner_radius=4.0, parent=self)
         self.cover_lbl.set_cover(cover_pix)
         layout.addWidget(self.cover_lbl)
 
@@ -614,8 +632,7 @@ class SearchSectionWidget(QFrame):
 
         elif self.category_name == "Artists":
             artist: ArtistGroup = item
-            from ui.views.artists_view import get_artist_collage
-            cover_pix = get_artist_collage(self.overlay.store, artist.name, 42, theme)
+            cover_pix = self.overlay._get_artist_cover_pixmap(artist.name, 42)
             row = ArtistRow(artist, self.query, theme, cover_pix)
             row.name_lbl.clicked.connect(lambda a=artist.name: self.overlay.artist_requested.emit(a))
             row.double_clicked.connect(lambda a=artist.name: self.overlay.artist_requested.emit(a))
@@ -968,6 +985,15 @@ class SearchOverlay(QFrame):
         elif isinstance(item, QPushButton):
             item.click()
 
+    def _get_artist_cover_pixmap(self, artist_name: str, size: int = 42) -> QPixmap:
+        cache_key = f"artist_{artist_name}_{size}"
+        if cache_key in self._art_cache:
+            return self._art_cache[cache_key]
+        from ui.views.artists_view import get_artist_collage
+        pix = get_artist_collage(self.store, artist_name, size, self._current_theme)
+        self._art_cache[cache_key] = pix
+        return pix
+
     def _get_cover_pixmap(self, path: str, has_art: bool, size: int = 42) -> QPixmap | None:
         if not path:
             return self._get_default_cover(size)
@@ -978,14 +1004,14 @@ class SearchOverlay(QFrame):
         if has_art:
             from core.metadata_reader import get_album_art
             dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
-            pix = get_album_art(path, target_size=size, dpr=dpr, corner_radius=6.0)
+            pix = get_album_art(path, target_size=size, dpr=dpr, corner_radius=4.0)
         if not pix or pix.isNull():
             pix = self._get_default_cover(size)
         self._art_cache[cache_key] = pix
         return pix
 
     def _get_default_cover(self, size: int = 42) -> QPixmap:
-        return get_default_cover(size, self._current_theme, corner_radius=6.0)
+        return get_default_cover(size, self._current_theme, corner_radius=4.0)
 
     def _play_results(self, items: list[Any], start_path: str | None = None) -> None:
         if not self.engine or not items:

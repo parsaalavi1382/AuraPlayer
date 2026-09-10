@@ -285,7 +285,8 @@ class QueueCoverLabel(QWidget):
         text_sec = self.theme_colors.get("text_secondary", "#9AA0AC")
 
         if self.pixmap:
-            painter.drawPixmap(cover_rect, self.pixmap)
+            from ui.widgets.aspect_label import paint_pixmap_aspect_fill
+            paint_pixmap_aspect_fill(painter, cover_rect, self.pixmap)
         else:
             from ui.svg_icon import get_default_cover
             disc_px = get_default_cover(cover_rect.width(), self.theme_colors, corner_radius=4.0)

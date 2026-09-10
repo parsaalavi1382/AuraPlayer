@@ -20,6 +20,7 @@ from ui.models.tracks_table_model import TracksTableModel, COL_TITLE, COL_ARTIST
 from ui.views.tracks_view import TrackHoverDelegate, HoverEventFilter
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
+from ui.widgets.aspect_label import AspectLabel
 
 
 def elide_text_2_lines(text: str, font: QFont, width: int) -> str:
@@ -137,7 +138,7 @@ class AlbumCard(QWidget):
         cover_size = card_width - 8 # subtract margins (4 + 4)
 
         # Cover Art (High res target for original quality)
-        self.cover_label = QLabel()
+        self.cover_label = AspectLabel()
         self.cover_label.setFixedSize(cover_size, cover_size)
         self.cover_label.setScaledContents(True)
         self.cover_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface);", theme))
@@ -282,7 +283,7 @@ class AlbumGridWidget(QWidget):
         self.setFixedHeight(total_height)
 
 
-class ArtistHoverableCoverLabel(QLabel):
+class ArtistHoverableCoverLabel(AspectLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_hovered = False

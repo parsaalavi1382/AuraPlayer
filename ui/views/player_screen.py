@@ -57,6 +57,7 @@ from ui.widgets.lyrics_panel import LyricsPanel
 from ui.widgets.hover_bold_button import HoverBoldButton
 from ui.widgets.lottie_icon_button import LottieIconButton
 from utils.paths import get_resource_path
+from ui.widgets.aspect_label import AspectLabel
 import os
 
 # Animation durations in ms
@@ -206,14 +207,14 @@ class PlayerScreen(QFrame):
         self._is_default = True
 
         # Dual background labels for full-bleed blurred artwork crossfading
-        self._bg_label_1 = QLabel(self)
+        self._bg_label_1 = AspectLabel(self)
         self._bg_label_1.setObjectName("playerBgLayer1")
         self._bg_label_1.setScaledContents(True)
         self._bg_label_1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._bg_label_1.setGeometry(self.rect())
         self._bg_label_1.lower()
 
-        self._bg_label_2 = QLabel(self)
+        self._bg_label_2 = AspectLabel(self)
         self._bg_label_2.setObjectName("playerBgLayer2")
         self._bg_label_2.setScaledContents(True)
         self._bg_label_2.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -303,7 +304,7 @@ class PlayerScreen(QFrame):
         art_inner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         art_inner.setContentsMargins(0, 0, 0, 0)
 
-        self._art_label = QLabel()
+        self._art_label = AspectLabel()
         self._art_label.setFixedSize(_ART_SIZE, _ART_SIZE)
         self._art_label.setScaledContents(True)
         self._art_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

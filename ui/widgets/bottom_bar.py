@@ -16,6 +16,7 @@ from ui.widgets.lottie_icon_button import LottieIconButton
 from ui.widgets.seek_bar import SeekBar
 from ui.svg_icon import svg_icon, svg_pixmap
 from utils.paths import get_resource_path
+from ui.widgets.aspect_label import AspectLabel
 import os
 
 from core.models import Track
@@ -114,7 +115,7 @@ class BottomBar(QFrame):
         left_main_layout.setSpacing(12)
 
         # Left: art thumbnail (بزرگ‌تر شدن سایز کاور آلبوم به 64)
-        self.art_label = QLabel()
+        self.art_label = AspectLabel()
         self.art_label.setObjectName("bottomBarArt")
         self.art_label.setFixedSize(64, 64)
         self.art_label.setScaledContents(True)

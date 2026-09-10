@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
     QPushButton, QFrame
 )
+from ui.widgets.aspect_label import AspectLabel
 from PyQt6.QtGui import QIcon
 
 from core.models import Track
@@ -66,7 +67,7 @@ class PropertiesDialog(QDialog):
         left_layout.setSpacing(12)
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
-        self.cover_label = QLabel()
+        self.cover_label = AspectLabel()
         self.cover_label.setFixedSize(180, 180)
         self.cover_label.setScaledContents(True)
         self.cover_label.setStyleSheet("border-radius: 8px; border: 1px solid var(--border); background-color: var(--surface);")

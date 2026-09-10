@@ -27,6 +27,7 @@ from core.metadata_reader import get_album_art
 from ui.theme import THEMES, DEFAULT_THEME, apply_theme_vars
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
+from ui.widgets.aspect_label import AspectLabel
 
 COL_TITLE = 0
 COL_ARTISTS = 1
@@ -825,7 +826,7 @@ class PlaylistHoverEventFilter(QObject):
         return super().eventFilter(obj, event)
 
 
-class HoverableCoverLabel(QLabel):
+class HoverableCoverLabel(AspectLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_hovered = False

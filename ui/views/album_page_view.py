@@ -26,6 +26,7 @@ from ui.theme import THEMES, DEFAULT_THEME, apply_theme_vars
 from ui.widgets.adjacent_resize_helper import AdjacentResizeHelper
 from ui.widgets.drag_table_view import AuraDragTableView
 from ui.widgets.clickable_label import ClickableLabel
+from ui.widgets.aspect_label import AspectLabel
 
 COL_TRACK_NO = 0
 COL_TITLE = 1
@@ -976,7 +977,7 @@ class AlbumPageView(QWidget):
         from ui.theme import apply_theme_vars
 
         # Large Album Art on the Left
-        self.art_label = QLabel()
+        self.art_label = AspectLabel()
         self.art_label.setFixedSize(200, 200)
         self.art_label.setScaledContents(True)
         self.art_label.setStyleSheet(apply_theme_vars("border-radius: 8px; background-color: var(--surface);", theme))

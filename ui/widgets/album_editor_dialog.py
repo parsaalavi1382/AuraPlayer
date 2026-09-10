@@ -23,6 +23,7 @@ from core.metadata_writer import write_track_metadata
 from ui.theme import THEMES, DEFAULT_THEME
 from ui.svg_icon import svg_pixmap
 from ui.widgets.metadata_editor_dialog import TagInputField
+from ui.widgets.aspect_label import AspectLabel
 
 
 class AlbumEditorDialog(QDialog):
@@ -91,7 +92,7 @@ class AlbumEditorDialog(QDialog):
         left_layout.setSpacing(12)
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
-        self.cover_label = QLabel()
+        self.cover_label = AspectLabel()
         self.cover_label.setFixedSize(180, 180)
         self.cover_label.setScaledContents(True)
         self.cover_label.setStyleSheet("border-radius: 8px; border: 1px solid var(--border); background-color: var(--surface);")
