@@ -17,8 +17,64 @@ from core.constants import CURRENT_VERSION
 
 CACHE_PATH = get_writable_data_path("library_cache.json")
 
+import os
+import ctypes
+
+def _apply_global_scaling():
+    """
+    Dynamically set QT_SCALE_FACTOR based on the primary monitor's resolution
+    so that the app appears proportionally the same across all screen sizes.
+    
+    1080p is the baseline (scale = 1.0) and remains completely unaffected.
+    For smaller screens (e.g. 720p), scale down to prevent UI clipping.
+    For larger screens (e.g. 1440p, 4K), scale up so UI elements are not tiny.
+    """
+    if sys.platform == "win32":
+        try:
+            # Enable Per-Monitor DPI Awareness V2 so Windows reports true physical pixels
+            try:
+                ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+            except Exception:
+                try:
+                    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+                except Exception:
+                    pass
+
+            user32 = ctypes.windll.user32
+            screen_h = user32.GetSystemMetrics(1)
+            
+            # Baseline is 1080p. If the screen is standard 1080p (~1080h),
+            # keep scale strictly 1.0 so 1080p displays are 100% unaffected.
+            if 1000 <= screen_h <= 1120:
+                scale = 1.0
+            else:
+                dpi = 96
+                try:
+                    dpi = user32.GetDpiForSystem()
+                except Exception:
+                    pass
+                system_dpi_scale = max(1.0, dpi / 96.0)
+                effective_logical_h = screen_h / system_dpi_scale
+                
+                # If effective logical height is close to 1080p (e.g. 4K at 200% = 1080 logical),
+                # Qt's built-in DPI scaling is already handling it perfectly.
+                if 800 <= effective_logical_h <= 1120:
+                    scale = 1.0
+                else:
+                    scale = max(0.6, min(2.5, effective_logical_h / 1080.0))
+            
+            existing_scale = float(os.environ.get("QT_SCALE_FACTOR", "1.0"))
+            final_scale = scale * existing_scale
+            
+            if round(final_scale, 2) != 1.0:
+                os.environ["QT_SCALE_FACTOR"] = f"{final_scale:.2f}"
+            elif "QT_SCALE_FACTOR" in os.environ:
+                del os.environ["QT_SCALE_FACTOR"]
+        except Exception as e:
+            print(f"Error applying global scaling: {e}")
 
 def main():
+    _apply_global_scaling()
 
 
     app = QApplication(sys.argv)
