@@ -6,6 +6,7 @@ import qtawesome as qta
 
 class UpdateBanner(QFrame):
     dismissed = pyqtSignal()
+    update_requested = pyqtSignal()
 
     def __init__(self, version: str, parent=None):
         super().__init__(parent)
@@ -20,8 +21,13 @@ class UpdateBanner(QFrame):
         self.icon_label.setFixedSize(16, 16)
         self.icon_label.setPixmap(qta.icon("fa5s.arrow-circle-up", color="#61AFEF").pixmap(16, 16))
 
-        self.text_label = QLabel(f"Version {version} is available. You can update from Settings.")
+        self.text_label = QLabel(f"Version {version} is available!")
         self.text_label.setObjectName("updateBannerText")
+
+        self.update_btn = QPushButton("Update Now")
+        self.update_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.update_btn.setObjectName("accentButton")
+        self.update_btn.clicked.connect(self._on_update)
 
         self.close_btn = QPushButton()
         self.close_btn.setFixedSize(24, 24)
@@ -44,6 +50,7 @@ class UpdateBanner(QFrame):
         layout.addWidget(self.icon_label)
         layout.addWidget(self.text_label)
         layout.addStretch(1)
+        layout.addWidget(self.update_btn)
         layout.addWidget(self.close_btn)
 
     def apply_theme(self, theme: dict) -> None:
@@ -66,3 +73,7 @@ class UpdateBanner(QFrame):
     def _on_close(self):
         self.hide()
         self.dismissed.emit()
+
+    def _on_update(self):
+        self.hide()
+        self.update_requested.emit()

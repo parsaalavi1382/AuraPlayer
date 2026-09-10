@@ -10,6 +10,7 @@ class ReleaseInfo:
     is_prerelease: bool
     body_markdown: str
     url: str
+    assets: list[dict]
 
 class UpdateCheckWorker(QThread):
     finished = pyqtSignal(object, object)  # latest_official, latest_prerelease
@@ -58,7 +59,8 @@ class UpdateCheckWorker(QThread):
                     version=tag_name,
                     is_prerelease=is_pre,
                     body_markdown=release.get("body", "No changelog provided."),
-                    url=release.get("html_url", "")
+                    url=release.get("html_url", ""),
+                    assets=release.get("assets", [])
                 )
 
                 if is_pre:

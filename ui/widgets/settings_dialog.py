@@ -190,6 +190,13 @@ class SettingsDialog(QDialog):
             theme = THEMES.get(self.store.cache.settings.theme, THEMES[DEFAULT_THEME])
             whats_new_btn.clicked.connect(lambda: self._show_changelog(release, theme))
             row.addWidget(whats_new_btn)
+            
+            if hasattr(release, 'assets') and release.assets:
+                download_btn = QPushButton("Download && Install")
+                download_btn.setObjectName("accentButton")
+                download_btn.clicked.connect(lambda: self._start_update(release.assets))
+                row.addWidget(download_btn)
+
             row.addStretch()
             
             w = QWidget()
@@ -205,6 +212,11 @@ class SettingsDialog(QDialog):
     def _show_changelog(self, release, theme):
         from ui.widgets.changelog_dialog import ChangelogDialog
         dialog = ChangelogDialog(release.version, release.body_markdown, theme, self)
+        dialog.exec()
+
+    def _start_update(self, assets):
+        from ui.widgets.update_progress_dialog import UpdateProgressDialog
+        dialog = UpdateProgressDialog(assets, self)
         dialog.exec()
 
     def _refresh_folder_list(self) -> None:

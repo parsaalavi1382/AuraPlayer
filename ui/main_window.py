@@ -1204,11 +1204,12 @@ class MainWindow(QMainWindow):
 
     def _on_update_check_finished(self, latest_official, latest_prerelease):
         if latest_official:
-            self._show_update_banner(latest_official.version)
+            self._show_update_banner(latest_official)
 
-    def _show_update_banner(self, version: str):
+    def _show_update_banner(self, release):
         if not self.update_banner:
-            self.update_banner = UpdateBanner(version, self)
+            self.update_banner = UpdateBanner(release.version, self)
+            self.update_banner.update_requested.connect(lambda: self._start_update(release.assets))
             # Insert banner just under top_bar
             # top_bar is at index 0, so insert at index 1
             main_layout = self.centralWidget().layout()
@@ -1218,6 +1219,11 @@ class MainWindow(QMainWindow):
             from ui.theme import THEMES, DEFAULT_THEME
             theme = THEMES.get(self.store.cache.settings.theme, THEMES[DEFAULT_THEME])
             self.update_banner.apply_theme(theme)
+
+    def _start_update(self, assets):
+        from ui.widgets.update_progress_dialog import UpdateProgressDialog
+        dialog = UpdateProgressDialog(assets, self)
+        dialog.exec()
 
     def _on_search_closed(self) -> None:
         self.top_bar.search_input.clear()
