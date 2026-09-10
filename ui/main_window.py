@@ -382,13 +382,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "search_overlay"):
             self.search_overlay.apply_theme(theme)
         if hasattr(self, "update_banner") and self.update_banner:
-            self.update_banner.setStyleSheet(self.update_banner.styleSheet().replace(
-                "var(--surface)", theme.get("surface", "#1C1F26")
-            ).replace(
-                "var(--border)", theme.get("border", "#30363D")
-            ).replace(
-                "var(--text)", theme.get("text_primary", "#E6E6E6")
-            ))
+            self.update_banner.apply_theme(theme)
 
         # Tracks table danger color
         self.tracks_view.model.set_danger_color(theme["danger"])
@@ -1223,13 +1217,7 @@ class MainWindow(QMainWindow):
             # Apply current theme to it
             from ui.theme import THEMES, DEFAULT_THEME
             theme = THEMES.get(self.store.cache.settings.theme, THEMES[DEFAULT_THEME])
-            self.update_banner.setStyleSheet(self.update_banner.styleSheet().replace(
-                "var(--surface)", theme.get("surface", "#1C1F26")
-            ).replace(
-                "var(--border)", theme.get("border", "#30363D")
-            ).replace(
-                "var(--text)", theme.get("text_primary", "#E6E6E6")
-            ))
+            self.update_banner.apply_theme(theme)
 
     def _on_search_closed(self) -> None:
         self.top_bar.search_input.clear()
