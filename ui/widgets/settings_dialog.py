@@ -105,6 +105,25 @@ class SettingsDialog(QDialog):
         )
         layout.addWidget(self.separator_manager)
 
+        # --- Updates section ---
+        updates_label = QLabel("UPDATES")
+        updates_label.setObjectName("sectionLabel")
+        layout.addWidget(updates_label)
+        
+        updates_layout = QHBoxLayout()
+        self.check_updates_btn = QPushButton("Check for Updates")
+        self.check_updates_btn.clicked.connect(self._on_check_updates)
+        updates_layout.addWidget(self.check_updates_btn)
+        
+        self.updates_status_lbl = QLabel("")
+        self.updates_status_lbl.setStyleSheet("color: var(--text_secondary);")
+        updates_layout.addWidget(self.updates_status_lbl)
+        updates_layout.addStretch()
+        layout.addLayout(updates_layout)
+        
+        self.updates_results_layout = QVBoxLayout()
+        layout.addLayout(self.updates_results_layout)
+
         layout.addStretch()
 
         # --- Save / Cancel ---
@@ -121,6 +140,72 @@ class SettingsDialog(QDialog):
         self.save_btn.clicked.connect(self._on_save)
 
         self._refresh_folder_list()
+
+    def _on_check_updates(self):
+        self.check_updates_btn.setEnabled(False)
+        self.updates_status_lbl.setText("Checking for updates...")
+        
+        # Clear previous results
+        while self.updates_results_layout.count():
+            child = self.updates_results_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+            elif child.layout():
+                # basic clean up for nested layout
+                while child.layout().count():
+                    c = child.layout().takeAt(0)
+                    if c.widget():
+                        c.widget().deleteLater()
+                child.layout().deleteLater()
+                
+        from core.constants import CURRENT_VERSION
+        from core.update_checker import UpdateCheckWorker
+        self.update_worker = UpdateCheckWorker(CURRENT_VERSION, self)
+        self.update_worker.finished.connect(self._on_update_check_finished)
+        self.update_worker.error.connect(self._on_update_check_error)
+        self.update_worker.start()
+
+    def _on_update_check_error(self, err_msg: str):
+        self.check_updates_btn.setEnabled(True)
+        self.updates_status_lbl.setText(f"Error: {err_msg}")
+
+    def _on_update_check_finished(self, latest_official, latest_prerelease):
+        self.check_updates_btn.setEnabled(True)
+        self.updates_status_lbl.setText("")
+        
+        if not latest_official and not latest_prerelease:
+            self.updates_status_lbl.setText("You are on the latest version.")
+            return
+            
+        from PyQt6.QtWidgets import QWidget
+        from core.update_checker import ReleaseInfo
+        from ui.theme import THEMES, DEFAULT_THEME
+        
+        def add_release_row(title: str, release: ReleaseInfo):
+            row = QHBoxLayout()
+            lbl = QLabel(f"{title}: {release.version}")
+            row.addWidget(lbl)
+            
+            whats_new_btn = QPushButton("What's New")
+            theme = THEMES.get(self.store.cache.settings.theme, THEMES[DEFAULT_THEME])
+            whats_new_btn.clicked.connect(lambda: self._show_changelog(release, theme))
+            row.addWidget(whats_new_btn)
+            row.addStretch()
+            
+            w = QWidget()
+            w.setLayout(row)
+            self.updates_results_layout.addWidget(w)
+            
+        if latest_official:
+            add_release_row("Latest Official Release", latest_official)
+            
+        if latest_prerelease:
+            add_release_row("Latest Pre-release", latest_prerelease)
+
+    def _show_changelog(self, release, theme):
+        from ui.widgets.changelog_dialog import ChangelogDialog
+        dialog = ChangelogDialog(release.version, release.body_markdown, theme, self)
+        dialog.exec()
 
     def _refresh_folder_list(self) -> None:
         self.folder_list.clear()

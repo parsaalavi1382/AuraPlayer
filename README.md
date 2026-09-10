@@ -15,9 +15,9 @@ AuraPlayer is a native offline-first music player featuring a gorgeous, theme-ad
 
 ### 🚀 Official Release Binaries & Cross-Platform Download
 
-I have officially published the **[v1.1.0 Official Release](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/v1.1.0)** with compiled binaries for **Windows, macOS, and Linux**.
+I have officially published the **[v1.1.1 Official Release](https://github.com/parsaalavi1382/AuraPlayer/releases/tag/v1.1.1)** with compiled binaries for **Windows, macOS, and Linux**.
 
-* **Windows:** Fully packaged and verified using Inno Setup (`installer.iss`). Includes both full installation wizard (`AuraPlayer_Setup_v1.1.0.exe`) and portable single-folder build (`AuraPlayer_Windows.zip`).
+* **Windows:** Fully packaged and verified using Inno Setup (`installer.iss`). Includes both full installation wizard (`AuraPlayer_Setup_v1.1.1.exe`) and portable single-folder build (`AuraPlayer_Windows.zip`).
 * **macOS & Linux:** The build pipelines are configured via GitHub Actions (`release.yml`), but since I do not have physical access to a Mac or Linux machine to test all environment hooks, **your feedback is deeply appreciated!**
 
 If you are on macOS or Linux, please feel free to download the release, run it, and let me know how it handles native audio output, fonts, and window framing.
@@ -26,9 +26,9 @@ If you are on macOS or Linux, please feel free to download the release, run it, 
 
 ---
 
-## 🌟 Project Status: Official Release (v1.1.0)
+## 🌟 Project Status: Official Release (v1.1.1)
 
-AuraPlayer v1.1.0 is officially released! Key updates include **Windows System Media Transport Controls (SMTC)** integration for OS-level background & headphone controls (Windows OS), **original quality album cover art rendering** across all views, **60 FPS lag-free tab transitions** via pixmap caching, full **Keyboard Shortcuts & Hardware Device Controls**, and updated **Artist Discography layouts** with 2-line title elision.
+AuraPlayer v1.1.1 is officially released! Key updates include an **Automated & Manual Update Checker** with in-app Markdown release notes viewer, **aspect ratio enforcement without distortion or quality loss** on high-DPI displays across all views, **Windows System Media Transport Controls (SMTC)** integration for OS-level background & headphone controls (Windows OS), **60 FPS lag-free tab transitions** via pixmap caching, full **Keyboard Shortcuts & Hardware Device Controls**, and updated **Artist Discography layouts** with 2-line title elision.
 
 🐛 **Found an issue?** If you run into any bugs or have suggestions, please open a ticket in the **Issues** section.
 

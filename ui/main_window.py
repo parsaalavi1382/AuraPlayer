@@ -48,6 +48,9 @@ from ui.views.artist_page_view import ArtistPageView
 from ui.views.album_page_view import AlbumPageView
 from ui.views.genre_page_view import GenrePageView
 from ui.views.search_view import SearchOverlay
+from ui.widgets.update_banner import UpdateBanner
+from core.update_checker import UpdateCheckWorker
+from core.constants import CURRENT_VERSION
 
 _MIN_SIZE_NORMAL = QSize(800, 560)
 _MIN_SIZE_PLAYER = QSize(500, 700)
@@ -95,6 +98,9 @@ class MainWindow(QMainWindow):
         # --- Top Bar ---
         self.top_bar = TopBar()
         self.top_bar.settings_clicked.connect(self._open_settings)
+        
+        self.update_banner = None  # Will be instantiated if an update is found
+
         self.top_bar.search_input.textChanged.connect(self._on_search_text_changed)
         self.top_bar.search_input.escape_pressed.connect(self._on_search_escape)
         self.top_bar.back_clicked.connect(self._on_back_clicked)
@@ -341,6 +347,9 @@ class MainWindow(QMainWindow):
         # Trigger startup sync shortly after window loads
         QTimer.singleShot(100, self._run_startup_sync)
 
+        # Check for updates in background shortly after launch
+        QTimer.singleShot(1500, self._check_for_updates)
+
         # Install application-wide event filter for global keyboard shortcuts & click-outside handling
         app = QApplication.instance()
         if app:
@@ -372,6 +381,14 @@ class MainWindow(QMainWindow):
         self.main_queue_panel.apply_theme(theme)
         if hasattr(self, "search_overlay"):
             self.search_overlay.apply_theme(theme)
+        if hasattr(self, "update_banner") and self.update_banner:
+            self.update_banner.setStyleSheet(self.update_banner.styleSheet().replace(
+                "var(--surface)", theme.get("surface", "#1C1F26")
+            ).replace(
+                "var(--border)", theme.get("border", "#30363D")
+            ).replace(
+                "var(--text)", theme.get("text_primary", "#E6E6E6")
+            ))
 
         # Tracks table danger color
         self.tracks_view.model.set_danger_color(theme["danger"])
@@ -1185,6 +1202,34 @@ class MainWindow(QMainWindow):
             self.search_overlay.hide_search()
             self.top_bar.search_input.clear()
             self.setFocus()
+
+    def _check_for_updates(self):
+        self.update_worker = UpdateCheckWorker(CURRENT_VERSION, self)
+        self.update_worker.finished.connect(self._on_update_check_finished)
+        self.update_worker.start()
+
+    def _on_update_check_finished(self, latest_official, latest_prerelease):
+        if latest_official:
+            self._show_update_banner(latest_official.version)
+
+    def _show_update_banner(self, version: str):
+        if not self.update_banner:
+            self.update_banner = UpdateBanner(version, self)
+            # Insert banner just under top_bar
+            # top_bar is at index 0, so insert at index 1
+            main_layout = self.centralWidget().layout()
+            main_layout.insertWidget(1, self.update_banner)
+            
+            # Apply current theme to it
+            from ui.theme import THEMES, DEFAULT_THEME
+            theme = THEMES.get(self.store.cache.settings.theme, THEMES[DEFAULT_THEME])
+            self.update_banner.setStyleSheet(self.update_banner.styleSheet().replace(
+                "var(--surface)", theme.get("surface", "#1C1F26")
+            ).replace(
+                "var(--border)", theme.get("border", "#30363D")
+            ).replace(
+                "var(--text)", theme.get("text_primary", "#E6E6E6")
+            ))
 
     def _on_search_closed(self) -> None:
         self.top_bar.search_input.clear()

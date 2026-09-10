@@ -13,6 +13,7 @@ from core.library_store import LibraryStore
 from ui.main_window import MainWindow
 from ui.theme import build_stylesheet
 from utils.paths import get_writable_data_path
+from core.constants import CURRENT_VERSION
 
 CACHE_PATH = get_writable_data_path("library_cache.json")
 

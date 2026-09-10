@@ -57,6 +57,9 @@ a = Analysis(
         'winrt.windows.storage',
         'winrt.windows.storage.streams',
         'winrt.windows.foundation',
+        'requests',
+        'packaging',
+        'packaging.version',
     ] + winrt_submodules,
     hookspath=[],
     hooksconfig={},
@@ -134,6 +137,8 @@ if sys.platform == 'darwin':
         icon=icns_path,
         bundle_identifier='com.parsaalavi.auraplayer',
         info_plist={
+            'CFBundleShortVersionString': '1.1.1',
+            'CFBundleVersion': '1.1.1',
             'NSHighResolutionCapable': 'True',
             'LSBackgroundOnly': 'False',
         }

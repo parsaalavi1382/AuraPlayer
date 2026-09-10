@@ -13,4 +13,6 @@ winrt-Windows.Storage; sys_platform == 'win32'
 winrt-Windows.Storage.Streams; sys_platform == 'win32'
 winrt-Windows.System; sys_platform == 'win32'
 winsdk; sys_platform == 'win32'
+requests>=2.31.0
+packaging>=23.1
 
